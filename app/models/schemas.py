@@ -11,11 +11,19 @@ class BBox(BaseModel):
 
 
 class SearchHit(BaseModel):
-    sku_id: str
+    pinecone_id: str
     score: float
-    image_id: str | None = None
+    image_url: str | None = None
+    product_url: str | None = None
+    name_english: str | None = None
+    name_arabic: str | None = None
     category: str | None = None
-    attributes: dict | None = None
+    price_amount: int | None = None
+    price_unit: str | None = None
+    is_active: bool | None = None
+    store_id: int | None = None
+    countries: list[str] | None = None
+    store: str | None = None
 
 
 class SearchResponse(BaseModel):
@@ -25,9 +33,9 @@ class SearchResponse(BaseModel):
 
 
 class CatalogUpsertResponse(BaseModel):
-    sku_id: str
-    image_id: str
+    pinecone_id: str
     upserted: bool
+    message: str | None = None
 
 
 class DetectedObject(BaseModel):
@@ -52,6 +60,7 @@ class SegmentedObject(BaseModel):
     score: float
     object_id: int
     mask_base64: str  # Base64 encoded mask image (PNG)
+    mask_polygon: list[list[float]] | None = None  # Polygon points for fast search
 
 
 class DetectionSegmentationResponse(BaseModel):

@@ -112,9 +112,21 @@ async def detect_and_segment_objects(
                 logger.warning(f"Invalid bbox for object {idx}: {e}, skipping")
                 continue
             
-            # Run segmentation
+            # Extract polygon mask if available (from RF-DETR API)
+            mask_polygon = getattr(det, 'mask_polygon', None)
+            
+            # Run segmentation with polygon if available
             with timed(f"Segmentation {idx}"):
-                segment = await container.segmentation.segment(img, bbox)
+                if hasattr(container.segmentation, 'segment') and mask_polygon:
+                    try:
+                        segment = await container.segmentation.segment(img, bbox, mask_polygon=mask_polygon)
+                        logger.debug(f"Used polygon segmentation for object {idx}")
+                    except TypeError:
+                        # Fallback if segmentation doesn't support polygon parameter
+                        segment = await container.segmentation.segment(img, bbox)
+                        logger.debug(f"Fallback to SAM2/GrabCut for object {idx}")
+                else:
+                    segment = await container.segmentation.segment(img, bbox)
             
             # Convert mask to base64 PNG
             # Create a binary mask image (0 = background, 255 = foreground)
@@ -133,6 +145,7 @@ async def detect_and_segment_objects(
                     score=det.score,
                     object_id=idx,
                     mask_base64=mask_base64,
+                    mask_polygon=det.mask_polygon,  # Include polygon for fast search
                 )
             )
             

@@ -10,6 +10,11 @@ APP_NAME="Interior Visual Search"
 APP_ENV="dev"
 LOG_LEVEL="INFO"
 
+# Test mode: Skip embedding and Pinecone upsert (for pipeline testing)
+# Set to "true" to test validation, detection, segmentation, cropping only
+# Set to "false" for full production ingestion
+TEST_MODE=false
+
 # ====================================
 # PINECONE CONFIGURATION (REQUIRED)
 # Get your API key from: https://www.pinecone.io/
@@ -41,9 +46,9 @@ SAM2_MODEL_PATH=D:\image_image_search\backend\app\models\sam2.1_l.pt
 # ====================================
 # IMAGE VALIDATION SETTINGS
 # ====================================
-IMAGE_MIN_DIMENSION=100
+IMAGE_MIN_DIMENSION=600
 IMAGE_MAX_DIMENSION=4096
-IMAGE_MAX_SIZE_MB=10
+IMAGE_MAX_SIZE_MB=15
 
 # ====================================
 # IMAGE STORAGE DIRECTORIES

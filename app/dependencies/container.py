@@ -11,11 +11,13 @@ from app.repositories.pinecone_repo import PineconeVectorRepository
 from app.services.image_io import ImageIOService
 from app.services.preprocessing import PreprocessingService
 from app.services.detection import DetectionService, RTDETRDetectionService
+from app.services.detection_rfdetr import RFDETRDetectionService
 from app.services.segmentation import (
     SegmentationService,
     SAM2SegmentationService,
     SAMLikeSegmentationService,
 )
+from app.services.segmentation_polygon import PolygonSegmentationService
 from app.services.embedding import EmbeddingService, HFEmbeddingService
 from app.services.embedding_multiscale import MultiScaleEmbeddingService
 from app.services.attributes import AttributeService
@@ -79,18 +81,50 @@ class Container:
         )
 
         # ---- Detection (Furniture/Products) ----
-        detection = RTDETRDetectionService(model_path=settings.rtdetr_model_path)
+        detection_mode = settings.detection_mode.lower()
+        
+        if detection_mode == "runpod":
+            # Use RunPod RF-DETR API (primary)
+            detection = RFDETRDetectionService(
+                api_url=settings.runpod_api_url,
+                status_url=settings.runpod_status_url,
+                api_key=settings.runpod_api_key,
+                confidence_threshold=settings.runpod_confidence_threshold,
+                max_wait_seconds=settings.runpod_max_wait_seconds,
+            )
+            logger.info("Using RF-DETR via RunPod API for detection")
+        else:
+            # Use local RT-DETR (fallback)
+            try:
+                detection = RTDETRDetectionService(model_path=settings.rtdetr_model_path)
+                logger.info("Using local RT-DETR for detection")
+            except FileNotFoundError as e:
+                logger.error(f"Local RT-DETR model not found: {e}")
+                logger.warning("Falling back to RunPod RF-DETR API")
+                detection = RFDETRDetectionService(
+                    api_url=settings.runpod_api_url,
+                    status_url=settings.runpod_status_url,
+                    api_key=settings.runpod_api_key,
+                    confidence_threshold=settings.runpod_confidence_threshold,
+                    max_wait_seconds=settings.runpod_max_wait_seconds,
+                )
 
         # ---- Segmentation (Mask-aware) ----
-        # Try to use SAM2.1 (Ultralytics) if available, fallback to GrabCut
-        try:
-            segmentation = SAM2SegmentationService(
-                model_path=settings.sam2_model_path,
-            )
-            logger.info("Using SAM2.1 (Ultralytics) for segmentation")
-        except (ImportError, FileNotFoundError) as e:
-            logger.warning(f"SAM2.1 not available ({e}), falling back to GrabCut segmentation")
-            segmentation = SAMLikeSegmentationService()
+        # Use polygon segmentation if RF-DETR API is used (provides polygon masks)
+        # Otherwise use SAM2.1 or GrabCut
+        if detection_mode == "runpod":
+            segmentation = PolygonSegmentationService()
+            logger.info("Using polygon segmentation (from RF-DETR API masks)")
+        else:
+            # Try to use SAM2.1 (Ultralytics) if available, fallback to GrabCut
+            try:
+                segmentation = SAM2SegmentationService(
+                    model_path=settings.sam2_model_path,
+                )
+                logger.info("Using SAM2.1 (Ultralytics) for segmentation")
+            except (ImportError, FileNotFoundError) as e:
+                logger.warning(f"SAM2.1 not available ({e}), falling back to GrabCut segmentation")
+                segmentation = SAMLikeSegmentationService()
 
         # ---- Embeddings (Instance + Semantic) ----
         # Use multi-scale embedding for better robustness
@@ -148,6 +182,7 @@ class Container:
 
         # ---- Search Orchestration ----
         search_service = SearchService(
+            settings=settings,
             image_io=image_io,
             preprocessing=preprocessing,
             detection=detection,

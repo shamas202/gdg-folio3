@@ -8,6 +8,7 @@ class Detection:
     category: str
     bbox: tuple[int, int, int, int]  # x1,y1,x2,y2
     score: float
+    mask_polygon: list | None = None  # Polygon coordinates from RF-DETR API
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     app_name: str = Field(default="Interior Visual Search", alias="APP_NAME")
     app_env: str = Field(default="dev", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    
+    # Test mode: Skip embedding and Pinecone upsert (for pipeline testing)
+    test_mode: bool = Field(default=False, alias="TEST_MODE")
 
     pinecone_api_key: str = Field(alias="PINECONE_API_KEY")
     pinecone_index_name: str = Field(default="interior-products", alias="PINECONE_INDEX_NAME")
@@ -44,10 +47,26 @@ class Settings(BaseSettings):
         alias="SAM2_MODEL_PATH"
     )
     
+    # RunPod RF-DETR API (primary detection + segmentation)
+    runpod_api_url: str = Field(
+        default="https://api.runpod.ai/v2/4wgmy3tiffyi2p/run",
+        alias="RUNPOD_API_URL"
+    )
+    runpod_status_url: str = Field(
+        default="https://api.runpod.ai/v2/4wgmy3tiffyi2p/status",
+        alias="RUNPOD_STATUS_URL"
+    )
+    runpod_api_key: str = Field(alias="RUNPOD_API_KEY")
+    runpod_confidence_threshold: float = Field(default=0.10, alias="RUNPOD_CONFIDENCE_THRESHOLD")
+    runpod_max_wait_seconds: int = Field(default=60, alias="RUNPOD_MAX_WAIT_SECONDS")
+    
+    # Detection mode: "runpod" or "local"
+    detection_mode: str = Field(default="runpod", alias="DETECTION_MODE")
+    
     # Image validation settings
-    image_min_dimension: int = Field(default=100, alias="IMAGE_MIN_DIMENSION")
+    image_min_dimension: int = Field(default=400, alias="IMAGE_MIN_DIMENSION")
     image_max_dimension: int = Field(default=4096, alias="IMAGE_MAX_DIMENSION")
-    image_max_size_mb: int = Field(default=10, alias="IMAGE_MAX_SIZE_MB")
+    image_max_size_mb: int = Field(default=15, alias="IMAGE_MAX_SIZE_MB")
     
     # Image storage directories
     catalog_images_dir: str = Field(default="images/catalog", alias="CATALOG_IMAGES_DIR")

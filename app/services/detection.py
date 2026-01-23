@@ -6,7 +6,13 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from ultralytics import RTDETR
+
+try:
+    from ultralytics import RTDETR
+    RTDETR_AVAILABLE = True
+except ImportError:
+    RTDETR_AVAILABLE = False
+    RTDETR = None
 
 from app.models.domain import Detection
 
@@ -28,6 +34,11 @@ class RTDETRDetectionService(DetectionService):
 
     def __post_init__(self) -> None:
         # Load RT-DETR model
+        if not RTDETR_AVAILABLE:
+            raise RuntimeError(
+                "ultralytics not installed. Install with: pip install ultralytics>=8.3.0 "
+                "or use DETECTION_MODE=runpod for RunPod RF-DETR API"
+            )
         if not Path(self.model_path).exists():
             raise FileNotFoundError(f"RT-DETR model not found at {self.model_path}")
         

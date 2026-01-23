@@ -148,17 +148,19 @@ Thumbs.db
 *.tar.gz
 *.rar
 
-# User uploaded images (if you want to ignore them)
-# Uncomment if you don't want to track uploaded images
-# images/catalog/*
-# images/search/*
+# User uploaded images
+images/catalog/*
+!images/catalog/.gitkeep
+images/search/*
+!images/search/.gitkeep
 
-# Keep directory structure but ignore contents
-# Uncomment if needed:
-# images/catalog/*
-# !images/catalog/.gitkeep
-# images/search/*
-# !images/search/.gitkeep
+# Debug crop folders (generated during ingestion/search)
+debug_crop_image/
+debug_crops_search/
+
+# Ingestion outputs
+failed_ingestions.csv
+ingestion.log
 
 # Logs
 *.log
@@ -178,3 +180,9 @@ logs/
 # Keep environment template
 !ENV_TEMPLATE.txt
 
+# Frontend (Next.js)
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+frontend/.env.local
+frontend/.env.*.local

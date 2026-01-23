@@ -5,33 +5,47 @@ from io import BytesIO
 from pathlib import Path
 
 import numpy as np
+import cv2
 from PIL import Image
 from fastapi import UploadFile
+
+from app.core.constants import (
+    SMALL_CATEGORIES,
+    MEDIUM_CATEGORIES,
+    LARGE_CATEGORIES,
+    MAX_FILE_SIZE_MB,
+    MIN_DIMENSION_UNIVERSAL,
+    MAX_DIMENSION,
+    BLUR_THRESHOLDS,
+    CONTRAST_THRESHOLDS,
+)
 
 
 @dataclass
 class ImageIOService:
     """
-    Image I/O service with advanced validation and quality checks.
+    Image I/O service with category-based validation and quality checks.
     
     Features:
+    - Category-aware blur detection (different thresholds for small/large objects)
     - Comprehensive file validation (size, format, dimensions)
     - Automatic resizing for large images (prevents OOM)
-    - Quality checks (detects blank/corrupt images)
+    - Hard rejections for poor quality (blur, brightness, contrast)
     - Support for JPEG, PNG, WebP formats
     - Separate directories for catalog and search images
-    - Graceful error handling with detailed messages
+    - Detailed error messages for debugging
     
     Best Practices:
     - Always validate images before processing
+    - Use category parameter for category-specific checks
     - Resize large images to prevent memory issues
     - Provide clear error messages for debugging
     """
     catalog_images_dir: Path = Path("images/catalog")
     search_images_dir: Path = Path("images/search")
-    min_dimension: int = 100
-    max_dimension: int = 4096
-    max_file_size_mb: int = 10
+    min_dimension: int = MIN_DIMENSION_UNIVERSAL
+    max_dimension: int = MAX_DIMENSION
+    max_file_size_mb: int = MAX_FILE_SIZE_MB
     
     def __post_init__(self):
         """Ensure image directories exist"""
@@ -42,22 +56,115 @@ class ImageIOService:
         logger.info(f"  Catalog images: {self.catalog_images_dir.absolute()}")
         logger.info(f"  Search images: {self.search_images_dir.absolute()}")
     
-    async def read_upload_as_rgb(self, file: UploadFile) -> Image.Image:
+    def get_category_requirements(self, category: str) -> dict:
         """
-        Read and validate uploaded image with comprehensive checks.
+        Get quality requirements based on product category (3-tier system).
+        
+        Different tiers have different quality standards:
+        - Small objects (cups, plates) - blur ≥ 30, ROA ≥ 8%
+        - Medium objects (chairs, lamps) - blur ≥ 25, ROA ≥ 12%
+        - Large objects (sofas, beds) - blur ≥ 20, ROA ≥ 15%
+        
+        Args:
+            category: Product category (e.g., "cup", "chair", "bed")
+            
+        Returns:
+            Dictionary with blur_threshold, blur_warning, category_size
+            
+        Raises:
+            ValueError: If category is not in predefined lists
+        """
+        category_lower = category.lower().strip()
+        
+        if category_lower in SMALL_CATEGORIES:
+            return {
+                "blur_threshold": BLUR_THRESHOLDS["small"]["reject"],
+                "blur_warning": BLUR_THRESHOLDS["small"]["warn"],
+                "category_size": "small"
+            }
+        elif category_lower in MEDIUM_CATEGORIES:
+            return {
+                "blur_threshold": BLUR_THRESHOLDS["medium"]["reject"],
+                "blur_warning": BLUR_THRESHOLDS["medium"]["warn"],
+                "category_size": "medium"
+            }
+        elif category_lower in LARGE_CATEGORIES:
+            return {
+                "blur_threshold": BLUR_THRESHOLDS["large"]["reject"],
+                "blur_warning": BLUR_THRESHOLDS["large"]["warn"],
+                "category_size": "large"
+            }
+        else:
+            # Fail fast for unknown categories - forces data quality
+            raise ValueError(
+                f"Unknown category '{category}'. "
+                f"Category must be one of {len(SMALL_CATEGORIES)} small, "
+                f"{len(MEDIUM_CATEGORIES)} medium, or {len(LARGE_CATEGORIES)} large categories. "
+                f"Please check your data source."
+            )
+    
+    def compute_blur_score(self, img: Image.Image) -> float:
+        """
+        Compute blur score using Laplacian variance method.
+        
+        Higher score = sharper image
+        Lower score = blurrier image
+        
+        Typical ranges:
+        - < 30: Extremely blurry (unusable)
+        - 30-40: Very blurry (reject for small objects)
+        - 40-100: Acceptable sharpness
+        - 100-200: Good sharpness
+        - > 200: Excellent sharpness
+        
+        Args:
+            img: PIL Image in RGB mode
+            
+        Returns:
+            Blur score (variance of Laplacian operator)
+        """
+        # Convert PIL to numpy array
+        img_array = np.array(img)
+        
+        # Convert to grayscale for edge detection
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        
+        # Apply Laplacian operator (detects edges)
+        # Higher variance = more edges = sharper image
+        laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+        blur_score = laplacian.var()
+        
+        return blur_score
+    
+    async def read_upload_as_rgb(
+        self, 
+        file: UploadFile, 
+        category: str | None = None
+    ) -> Image.Image:
+        """
+        Read and validate uploaded image with quality checks.
         
         Validation includes:
-        - File size (prevents uploads that are too large)
-        - Image format (JPEG, PNG, WebP, etc.)
-        - Dimensions (min/max pixel size)
-        - Image quality (detects blank/corrupt images)
+        - File size (≤ 15MB)
+        - Image format (JPEG, PNG, WebP)
+        - Dimensions (≥ 500×500 universal minimum)
+        - Auto-resize if > 4096px
+        - **Blur detection** - HARD REJECTION:
+          * With category (ingestion): Category-specific (40 for small, 30 for large)
+          * Without category (retrieval): Universal threshold (30)
+        - **Contrast check (std ≥ 1.0)** - HARD REJECTION
         - Color mode conversion (ensures RGB)
+        
+        Note: Brightness check removed - RF-DETR detection naturally handles
+        unusable images, and brightness filtering rejected valid white-background products.
         
         Args:
             file: Uploaded file from FastAPI
+            category: Product category for category-specific validation (optional)
+                     If None, uses default blur threshold (30) for retrieval
             
         Returns:
-            PIL Image in RGB mode, resized if necessary
+            PIL Image in RGB mode, validated and resized if necessary
             
         Raises:
             ValueError: If image is invalid, corrupted, or fails validation
@@ -118,34 +225,100 @@ class ImageIOService:
             img.thumbnail((self.max_dimension, self.max_dimension), Image.Resampling.LANCZOS)
             logger.info(f"Resized from {original_size} to {img.size}")
         
-        # Quality checks: Detect potentially problematic images
+        # === BLUR DETECTION (HARD REJECTION) ===
+        try:
+            blur_score = self.compute_blur_score(img)
+            
+            if category:
+                # INGESTION: Category-specific blur check
+                requirements = self.get_category_requirements(category)
+                blur_threshold = requirements["blur_threshold"]
+                blur_warning = requirements["blur_warning"]
+                cat_size = requirements["category_size"]
+                
+                # Hard rejection for blurry images
+                if blur_score < blur_threshold:
+                    raise ValueError(
+                        f"Image too blurry for reliable detection and embedding. "
+                        f"Blur score: {blur_score:.1f}, required: {blur_threshold} for {cat_size} objects. "
+                        f"Please use a sharper, higher-quality image."
+                    )
+                
+                # Warning for moderate blur
+                elif blur_score < blur_warning:
+                    logger.warning(
+                        f"⚠️ Image has moderate blur (score: {blur_score:.1f}). "
+                        f"Consider using a sharper image for better search results."
+                    )
+                else:
+                    logger.debug(f"✓ Image sharpness acceptable (blur_score: {blur_score:.1f})")
+            else:
+                # RETRIEVAL: Universal blur check (category unknown)
+                blur_threshold = BLUR_THRESHOLDS["default"]["reject"]  # 30
+                blur_warning = BLUR_THRESHOLDS["default"]["warn"]  # 70
+                
+                # Hard rejection for very blurry images
+                if blur_score < blur_threshold:
+                    raise ValueError(
+                        f"Image too blurry for reliable detection. "
+                        f"Blur score: {blur_score:.1f}, required: {blur_threshold}. "
+                        f"Please use a sharper, higher-quality image."
+                    )
+                
+                # Warning for moderate blur
+                elif blur_score < blur_warning:
+                    logger.warning(
+                        f"⚠️ Image has moderate blur (score: {blur_score:.1f}). "
+                        f"Search results may be less accurate."
+                    )
+                else:
+                    logger.debug(f"✓ Image sharpness acceptable (blur_score: {blur_score:.1f})")
+                    
+        except ValueError:
+            # Re-raise ValueError (blur rejection)
+            raise
+        except Exception as e:
+            logger.warning(f"Blur detection failed (non-critical): {e}")
+            blur_score = None
+        
+        # === STATISTICAL QUALITY CHECKS (UNIVERSAL, HARD REJECTION) ===
         try:
             img_array = np.array(img)
             
-            # Check for uniform/blank images (very low variance)
+            # === CONTRAST CHECK (Standard Deviation) ===
             std_dev = img_array.std()
-            if std_dev < 1.0:
-                logger.warning(
-                    f"Image appears to be uniform/blank (std={std_dev:.2f}). "
-                    f"This may affect search quality."
+            
+            # Hard rejection for blank/uniform images
+            if std_dev < CONTRAST_THRESHOLDS["reject_min"]:
+                raise ValueError(
+                    f"Image rejected: almost blank or uniform (std={std_dev:.2f}). "
+                    f"The image has no meaningful content. "
+                    f"Please upload a valid product image."
                 )
-                # Don't reject, but warn user
             
-            # Check for extremely dark or bright images
+            # Warning for low contrast
+            elif std_dev < CONTRAST_THRESHOLDS["warn_min"]:
+                logger.warning(
+                    f"⚠️ Low contrast image (std={std_dev:.1f}). "
+                    f"Image may lack detail. Consider using better lighting."
+                )
+            
+
             mean_brightness = img_array.mean()
-            if mean_brightness < 10:
-                logger.warning("Image is extremely dark, may affect detection quality")
-            elif mean_brightness > 245:
-                logger.warning("Image is extremely bright, may affect detection quality")
             
-            logger.debug(
-                f"Image quality metrics: std={std_dev:.1f}, "
-                f"brightness={mean_brightness:.1f}, "
+            # Log comprehensive quality metrics
+            blur_display = f"{blur_score:.1f}" if blur_score is not None else "N/A"
+            logger.info(
+                f"📊 Quality: blur={blur_display}, "
+                f"contrast={std_dev:.1f}, brightness={mean_brightness:.1f}, "
                 f"size={img.size}"
             )
             
+        except ValueError:
+            # Re-raise ValueError (quality rejection)
+            raise
         except Exception as e:
-            logger.debug(f"Quality check skipped: {e}")
+            logger.warning(f"Statistical quality check failed (non-critical): {e}")
         
         return img
 

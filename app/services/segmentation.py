@@ -6,8 +6,14 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-import torch
 from loguru import logger
+
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
 
 from app.models.domain import Segment
 from app.models.schemas import BBox
@@ -32,11 +38,18 @@ class SAM2SegmentationService(SegmentationService):
     model_path: str = r"D:\image_image_search\backend\app\models\sam2.1_l.pt"
     
     def __post_init__(self) -> None:
+        if not TORCH_AVAILABLE:
+            raise RuntimeError(
+                "torch not installed. Install with: pip install torch torchvision "
+                "or use DETECTION_MODE=runpod for RunPod RF-DETR API with polygon segmentation"
+            )
+        
         try:
             from ultralytics import SAM
         except ImportError:
             raise ImportError(
-                "Ultralytics not installed. Install with: pip install ultralytics"
+                "Ultralytics not installed. Install with: pip install ultralytics>=8.3.0 "
+                "or use DETECTION_MODE=runpod for RunPod RF-DETR API with polygon segmentation"
             )
         
         # Check if model file exists

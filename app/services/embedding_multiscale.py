@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 import torch
 from transformers import AutoImageProcessor, AutoModel
-from transformers import CLIPModel, CLIPVisionModel
+from transformers import CLIPModel, CLIPVisionModel, CLIPImageProcessor
 from loguru import logger
 
 
@@ -81,12 +81,17 @@ class MultiScaleEmbeddingService:
 
             # Load semantic tower (CLIP for semantic features)
             logger.info(f"Loading semantic model: {self.semantic_model_name}")
-            self._sem_proc = AutoImageProcessor.from_pretrained(
-                self.semantic_model_name, 
-                use_fast=True
-            )
             
             model_name_lower = self.semantic_model_name.lower()
+            if "clip" in model_name_lower:
+                # Use CLIPImageProcessor for CLIP models
+                self._sem_proc = CLIPImageProcessor.from_pretrained(self.semantic_model_name)
+            else:
+                self._sem_proc = AutoImageProcessor.from_pretrained(
+                    self.semantic_model_name, 
+                    use_fast=True
+                )
+            
             if "clip" in model_name_lower:
                 try:
                     # Try loading as CLIPVisionModel first (vision-only, more efficient)
