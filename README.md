@@ -314,54 +314,10 @@ image-search-back/
 9. Return top 50 results
 ```
 
----
 
-## 📈 Performance
 
-### Ingestion Speed
-- **Small/Medium objects**: ~8-12 seconds per product
-- **Large objects**: ~15-20 seconds per product
-- **With 6 workers**: ~2 seconds effective rate
-- **4,000 products**: ~2-3 hours
 
-### Search Speed
-- **With bbox (object click)**: ~5-8 seconds
-- **Without bbox (full detection)**: ~10-15 seconds
-- **Bottleneck**: Pinecone vector retrieval (bandwidth dependent)
 
-### Expected Success Rates
-- **High-performing categories** (bed, chair, sofa): 70-80%
-- **Medium categories** (cups, tables): 50-60%
-- **Challenging categories** (textiles, lighting): 20-40%
-- **Overall**: 55-65%
-
----
-
-## 🐛 Troubleshooting
-
-### Ingestion Failures
-
-Check `failed_ingestions.csv` for breakdown:
-- **NO_DETECTION**: Category mismatch or poor image quality
-- **ROA**: Object too small in frame
-- **BLUR**: Image too blurry
-- **DOWNLOAD**: Network errors, 403 forbidden
-
-### Slow Search
-
-If vector search > 30 seconds:
-- Check Pinecone region (closer = faster)
-- Verify bandwidth to Pinecone
-- Catalog size affects retrieval time
-
-### Detection Issues
-
-Common category confusions:
-- Sofa sizes (2-seater ↔ 3-seater)
-- Lighting types (lampshade ↔ pendant-lighting)
-- Small tables (side-table ↔ console)
-
----
 
 ## 🔑 Key Configuration Files
 
@@ -380,32 +336,4 @@ Common category confusions:
 
 ---
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
----
-
-## 📝 License
-
-[Your License Here]
-
----
-
-## 👥 Authors
-
-- Built with ❤️ for visual product discovery
-
----
-
-## 🙏 Acknowledgments
-
-- RF-DETR for furniture detection
-- OpenAI CLIP for semantic understanding
-- Google ViT for instance-level features
-- Pinecone for vector search infrastructure
 
