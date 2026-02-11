@@ -50,10 +50,23 @@ class HFEmbeddingService(EmbeddingService):
 
         from loguru import logger
         
-        # Determine device (GPU preferred, CPU fallback)
+        # Determine device (GPU preferred, CPU fallback) with CUDA optimizations
         if torch.cuda.is_available():
             self._device = torch.device('cuda')
             logger.info("Embedding models using GPU (CUDA)")
+            
+            # Enable CUDA optimizations (works on Windows, no Triton needed)
+            torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
+            torch.backends.cudnn.deterministic = False  # Allow non-deterministic for speed
+            
+            # Enable TF32 for faster matrix operations on Ampere+ GPUs (RTX 3060+)
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            
+            # Set float32 matmul precision for speed (trades minimal precision for speed)
+            torch.set_float32_matmul_precision('medium')
+            
+            logger.info("CUDA optimizations enabled (cudnn.benchmark, TF32, optimized matmul)")
         else:
             self._device = torch.device('cpu')
             logger.info("Embedding models using CPU (GPU not available)")
@@ -64,6 +77,7 @@ class HFEmbeddingService(EmbeddingService):
         self._inst_model = AutoModel.from_pretrained(self.instance_model_name)
         self._inst_model.to(self._device)
         self._inst_model.eval()
+        # Note: torch.compile() removed - using CUDA optimizations instead for Windows compatibility
 
         # Semantic tower (CLIP vision backbone)
         logger.info(f"Loading semantic model: {self.semantic_model_name}")
@@ -85,6 +99,7 @@ class HFEmbeddingService(EmbeddingService):
         
         self._sem_model.to(self._device)
         self._sem_model.eval()
+        # Note: torch.compile() removed - using CUDA optimizations instead for Windows compatibility
         
         # NOTE: Not using quantization/FP16 as per user request - focus on best accuracy
         logger.info("Models loaded in full precision (FP32) for best accuracy")
@@ -115,7 +130,8 @@ class HFEmbeddingService(EmbeddingService):
         device = self._device if hasattr(self, '_device') else next(model.parameters()).device
         inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
         
-        with torch.no_grad():
+        # Use inference_mode() instead of no_grad() for better performance
+        with torch.inference_mode():
             out = model(**inputs)
 
         # Generic pooling strategy:

@@ -225,61 +225,63 @@ class ImageIOService:
             img.thumbnail((self.max_dimension, self.max_dimension), Image.Resampling.LANCZOS)
             logger.info(f"Resized from {original_size} to {img.size}")
         
-        # === BLUR DETECTION (HARD REJECTION) ===
-        try:
-            blur_score = self.compute_blur_score(img)
-            
-            if category:
-                # INGESTION: Category-specific blur check
-                requirements = self.get_category_requirements(category)
-                blur_threshold = requirements["blur_threshold"]
-                blur_warning = requirements["blur_warning"]
-                cat_size = requirements["category_size"]
-                
-                # Hard rejection for blurry images
-                if blur_score < blur_threshold:
-                    raise ValueError(
-                        f"Image too blurry for reliable detection and embedding. "
-                        f"Blur score: {blur_score:.1f}, required: {blur_threshold} for {cat_size} objects. "
-                        f"Please use a sharper, higher-quality image."
-                    )
-                
-                # Warning for moderate blur
-                elif blur_score < blur_warning:
-                    logger.warning(
-                        f"⚠️ Image has moderate blur (score: {blur_score:.1f}). "
-                        f"Consider using a sharper image for better search results."
-                    )
-                else:
-                    logger.debug(f"✓ Image sharpness acceptable (blur_score: {blur_score:.1f})")
-            else:
-                # RETRIEVAL: Universal blur check (category unknown)
-                blur_threshold = BLUR_THRESHOLDS["default"]["reject"]  # 30
-                blur_warning = BLUR_THRESHOLDS["default"]["warn"]  # 70
-                
-                # Hard rejection for very blurry images
-                if blur_score < blur_threshold:
-                    raise ValueError(
-                        f"Image too blurry for reliable detection. "
-                        f"Blur score: {blur_score:.1f}, required: {blur_threshold}. "
-                        f"Please use a sharper, higher-quality image."
-                    )
-                
-                # Warning for moderate blur
-                elif blur_score < blur_warning:
-                    logger.warning(
-                        f"⚠️ Image has moderate blur (score: {blur_score:.1f}). "
-                        f"Search results may be less accurate."
-                    )
-                else:
-                    logger.debug(f"✓ Image sharpness acceptable (blur_score: {blur_score:.1f})")
-                    
-        except ValueError:
-            # Re-raise ValueError (blur rejection)
-            raise
-        except Exception as e:
-            logger.warning(f"Blur detection failed (non-critical): {e}")
-            blur_score = None
+        # === BLUR DETECTION (DISABLED) ===
+        # Blur checks commented out - RF-DETR handles unusable images naturally
+        blur_score = None
+        # try:
+        #     blur_score = self.compute_blur_score(img)
+        #     
+        #     if category:
+        #         # INGESTION: Category-specific blur check
+        #         requirements = self.get_category_requirements(category)
+        #         blur_threshold = requirements["blur_threshold"]
+        #         blur_warning = requirements["blur_warning"]
+        #         cat_size = requirements["category_size"]
+        #         
+        #         # Hard rejection for blurry images
+        #         if blur_score < blur_threshold:
+        #             raise ValueError(
+        #                 f"Image too blurry for reliable detection and embedding. "
+        #                 f"Blur score: {blur_score:.1f}, required: {blur_threshold} for {cat_size} objects. "
+        #                 f"Please use a sharper, higher-quality image."
+        #             )
+        #         
+        #         # Warning for moderate blur
+        #         elif blur_score < blur_warning:
+        #             logger.warning(
+        #                 f"⚠️ Image has moderate blur (score: {blur_score:.1f}). "
+        #                 f"Consider using a sharper image for better search results."
+        #             )
+        #         else:
+        #             logger.debug(f"✓ Image sharpness acceptable (blur_score: {blur_score:.1f})")
+        #     else:
+        #         # RETRIEVAL: Universal blur check (category unknown)
+        #         blur_threshold = BLUR_THRESHOLDS["default"]["reject"]  # 30
+        #         blur_warning = BLUR_THRESHOLDS["default"]["warn"]  # 70
+        #         
+        #         # Hard rejection for very blurry images
+        #         if blur_score < blur_threshold:
+        #             raise ValueError(
+        #                 f"Image too blurry for reliable detection. "
+        #                 f"Blur score: {blur_score:.1f}, required: {blur_threshold}. "
+        #                 f"Please use a sharper, higher-quality image."
+        #             )
+        #         
+        #         # Warning for moderate blur
+        #         elif blur_score < blur_warning:
+        #             logger.warning(
+        #                 f"⚠️ Image has moderate blur (score: {blur_score:.1f}). "
+        #                 f"Search results may be less accurate."
+        #             )
+        #         else:
+        #             logger.debug(f"✓ Image sharpness acceptable (blur_score: {blur_score:.1f})")
+        #             
+        # except ValueError:
+        #     # Re-raise ValueError (blur rejection)
+        #     raise
+        # except Exception as e:
+        #     logger.warning(f"Blur detection failed (non-critical): {e}")
+        #     blur_score = None
         
         # === STATISTICAL QUALITY CHECKS (UNIVERSAL, HARD REJECTION) ===
         try:

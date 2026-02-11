@@ -76,6 +76,7 @@ LARGE_CATEGORIES = [
     "dining-table",
     # Large Floor Items
     "carpet",
+    "wardrobe",
 ]
 
 # === IMAGE QUALITY THRESHOLDS ===

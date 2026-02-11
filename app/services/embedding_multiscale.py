@@ -59,10 +59,23 @@ class MultiScaleEmbeddingService:
             logger.debug("MultiScaleEmbeddingService already loaded")
             return
 
-        # Determine device
+        # Determine device with CUDA optimizations
         if torch.cuda.is_available():
             self._device = torch.device('cuda')
             logger.info("Multi-scale embedding models using GPU (CUDA)")
+            
+            # Enable CUDA optimizations (works on Windows, no Triton needed)
+            torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
+            torch.backends.cudnn.deterministic = False  # Allow non-deterministic for speed
+            
+            # Enable TF32 for faster matrix operations on Ampere+ GPUs (RTX 3060+)
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            
+            # Set float32 matmul precision for speed (trades minimal precision for speed)
+            torch.set_float32_matmul_precision('medium')
+            
+            logger.info("CUDA optimizations enabled (cudnn.benchmark, TF32, optimized matmul)")
         else:
             self._device = torch.device('cpu')
             logger.warning("Multi-scale embedding models using CPU (GPU not available)")
@@ -77,6 +90,8 @@ class MultiScaleEmbeddingService:
             self._inst_model = AutoModel.from_pretrained(self.instance_model_name)
             self._inst_model.to(self._device)
             self._inst_model.eval()
+            # Note: torch.compile() removed - using CUDA optimizations instead for Windows compatibility
+            
             logger.info("Instance model loaded successfully")
 
             # Load semantic tower (CLIP for semantic features)
@@ -108,6 +123,8 @@ class MultiScaleEmbeddingService:
             
             self._sem_model.to(self._device)
             self._sem_model.eval()
+            # Note: torch.compile() removed - using CUDA optimizations instead for Windows compatibility
+            
             logger.info("Semantic model loaded successfully")
             
             # Using full precision (FP32) for best accuracy
@@ -167,7 +184,8 @@ class MultiScaleEmbeddingService:
             device = self._device if hasattr(self, '_device') else next(model.parameters()).device
             inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
             
-            with torch.no_grad():
+            # Use inference_mode() instead of no_grad() for better performance
+            with torch.inference_mode():
                 out = model(**inputs)
 
             # Extract features (handle different model architectures)

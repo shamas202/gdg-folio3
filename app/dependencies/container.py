@@ -221,6 +221,10 @@ class Container:
         Called on FastAPI shutdown.
         """
         await self.embedding.unload()
+        
+        # Close RunPod HTTP client if using RF-DETR detection
+        if hasattr(self.detection, '_close_client'):
+            await self.detection._close_client()
 
 
 # ============================

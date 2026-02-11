@@ -560,8 +560,8 @@ async def main():
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=6,
-        help="Maximum concurrent workers for RunPod API calls (default: 6)",
+        default=12,
+        help="Maximum concurrent workers for parallel processing (default: 12, recommended: 10-20)",
     )
     parser.add_argument(
         "--log-level",

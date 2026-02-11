@@ -49,11 +49,11 @@ class Settings(BaseSettings):
     
     # RunPod RF-DETR API (primary detection + segmentation)
     runpod_api_url: str = Field(
-        default="https://api.runpod.ai/v2/4wgmy3tiffyi2p/run",
+        default="https://api.runpod.ai/v2/y0jimdq4msw1q9/run",
         alias="RUNPOD_API_URL"
     )
     runpod_status_url: str = Field(
-        default="https://api.runpod.ai/v2/4wgmy3tiffyi2p/status",
+        default="https://api.runpod.ai/v2/y0jimdq4msw1q9/status",
         alias="RUNPOD_STATUS_URL"
     )
     runpod_api_key: str = Field(alias="RUNPOD_API_KEY")
@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     detection_mode: str = Field(default="runpod", alias="DETECTION_MODE")
     
     # Image validation settings
-    image_min_dimension: int = Field(default=400, alias="IMAGE_MIN_DIMENSION")
+    image_min_dimension: int = Field(default=500, alias="IMAGE_MIN_DIMENSION")
     image_max_dimension: int = Field(default=4096, alias="IMAGE_MAX_DIMENSION")
     image_max_size_mb: int = Field(default=15, alias="IMAGE_MAX_SIZE_MB")
     

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -251,17 +252,20 @@ class SearchService:
             )
         
         # === PRODUCTION MODE: Continue with embedding and upsert ===
+        # Run blocking operations in thread pool to avoid blocking the event loop
+        # This allows other async operations (RunPod polling) to continue
         with timed("Embedding"):
-            vector = self.embedding.embed_crops(crops)
+            # Run embedding in thread pool (CPU/GPU bound operation)
+            vector = await asyncio.to_thread(self.embedding.embed_crops, crops)
         
         # Use pinecone_id directly as vector_id (no UUID generation)
         vector_id = pinecone_id
 
-        
-        
         # Upsert to Pinecone using assigned_category as namespace
         with timed("Vector upsert"):
-            self.vectors.upsert(
+            # Run Pinecone upsert in thread pool (I/O bound operation)
+            await asyncio.to_thread(
+                self.vectors.upsert,
                 vector_id=vector_id,
                 vector=vector,
                 metadata=metadata,
@@ -386,8 +390,9 @@ class SearchService:
             logger.warning(f"Failed to save debug crops (non-critical): {e}")
         
         # Embedding and search (same as search_room_image)
+        # Run blocking operations in thread pool to avoid blocking the event loop
         with timed("Embedding"):
-            query_vector = self.embedding.embed_crops(crops)
+            query_vector = await asyncio.to_thread(self.embedding.embed_crops, crops)
         
         # Estimate catalog size
         catalog_size = await self._estimate_catalog_size(query_category)
@@ -402,7 +407,8 @@ class SearchService:
         logger.info(f"Retrieving {candidate_k} candidates (catalog: {catalog_size:,})")
 
         with timed("Vector search"):
-            candidates = self.vectors.query(
+            candidates = await asyncio.to_thread(
+                self.vectors.query,
                 vector=query_vector,
                 top_k=candidate_k,
                 category=query_category,
@@ -668,8 +674,9 @@ class SearchService:
         except Exception as e:
             logger.warning(f"Failed to save debug crops (non-critical): {e}")
 
+        # Run blocking operations in thread pool to avoid blocking the event loop
         with timed("Embedding"):
-            query_vector = self.embedding.embed_crops(crops)
+            query_vector = await asyncio.to_thread(self.embedding.embed_crops, crops)
         
         logger.debug(f"Query vector norm: {np.linalg.norm(query_vector):.3f}")
 
@@ -696,7 +703,8 @@ class SearchService:
         )
 
         with timed("Vector search"):
-            candidates = self.vectors.query(
+            candidates = await asyncio.to_thread(
+                self.vectors.query,
                 vector=query_vector,
                 top_k=candidate_k,
                 category=query_category,  # Use category-based namespace for fast search
@@ -813,8 +821,8 @@ class SearchService:
         from loguru import logger
         
         try:
-            # Get index stats from Pinecone
-            stats = self.vectors.get_stats(category=category)
+            # Get index stats from Pinecone (run in thread pool to avoid blocking)
+            stats = await asyncio.to_thread(self.vectors.get_stats, category=category)
             vector_count = stats.get('total_vector_count', 1000)
             
             logger.debug(
