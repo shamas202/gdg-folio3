@@ -22,16 +22,6 @@ from app.services.embedding import EmbeddingService
 from app.services.embedding_gemini import GeminiEmbeddingService
 from app.services.attributes import AttributeService
 
-from app.services.visual_matcher import VisualCrossEncoder
-from app.services.rerank import (
-    RerankService,
-    VisualCrossEncoderRerankService,
-)
-from app.services.rerank_advanced import (
-    MultiStageRerankService,
-    HybridRerankService,
-)
-
 from app.services.search_service import SearchService
 
 
@@ -53,9 +43,6 @@ class Container:
 
     # Vector DB
     vectors: PineconeVectorRepository
-
-    # Ranking
-    rerank: RerankService
 
     # High-level orchestration
     search_service: SearchService
@@ -142,16 +129,6 @@ class Container:
             dimension=settings.pinecone_dim,
         )
 
-        # ---- Reranker (plain cosine similarity) ----
-        visual_matcher = VisualCrossEncoder()
-
-        if settings.enable_multistage_rerank:
-            rerank = HybridRerankService(matcher=visual_matcher)
-            logger.info("Using hybrid multi-stage reranking")
-        else:
-            rerank = VisualCrossEncoderRerankService(matcher=visual_matcher)
-            logger.info("Using single-stage reranking")
-
         # ---- Search Orchestration ----
         search_service = SearchService(
             settings=settings,
@@ -162,7 +139,6 @@ class Container:
             embedding=embedding,
             attributes=attributes,
             vectors=vectors,
-            rerank=rerank,
         )
 
         return cls(
@@ -174,7 +150,6 @@ class Container:
             embedding=embedding,
             attributes=attributes,
             vectors=vectors,
-            rerank=rerank,
             search_service=search_service,
         )
 

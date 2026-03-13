@@ -80,6 +80,3 @@ class Settings(BaseSettings):
     search_deduplicate_skus: bool = Field(default=True, alias="SEARCH_DEDUPLICATE_SKUS")
     max_candidate_k: int = Field(default=5000, alias="MAX_CANDIDATE_K")
 
-    # Reranking
-    enable_multistage_rerank: bool = Field(default=True, alias="ENABLE_MULTISTAGE_RERANK")
-    rerank_stage1_ratio: float = Field(default=0.3, alias="RERANK_STAGE1_RATIO")

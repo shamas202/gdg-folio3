@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import time
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -17,10 +16,10 @@ def _l2_normalize(x: np.ndarray) -> np.ndarray:
     return x / n
 
 
-def _image_to_base64_jpeg(img: Image.Image) -> str:
+def _image_to_bytes(img: Image.Image) -> bytes:
     buf = BytesIO()
     img.save(buf, format="JPEG", quality=95)
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+    return buf.getvalue()
 
 
 @dataclass
@@ -31,8 +30,7 @@ class GeminiEmbeddingService(EmbeddingService):
     Replaces the dual-tower ViT + CLIP setup with a single multimodal API call.
 
     Per object:
-      - Sends tight crop  → Gemini API → 3072-dim vector
-      - Sends medium crop → Gemini API → 3072-dim vector
+      - Sends tight crop + medium crop in ONE API call → two 3072-dim vectors
       - Averages and L2-normalizes the two vectors
 
     Retry logic handles transient API rate-limit / server errors.
@@ -54,9 +52,8 @@ class GeminiEmbeddingService(EmbeddingService):
         if self._loaded:
             return
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            self._genai = genai
+            from google import genai
+            self._client = genai.Client(api_key=self.api_key)
             self._loaded = True
             logger.success(
                 f"GeminiEmbeddingService ready — model: {self.model}, "
@@ -64,8 +61,7 @@ class GeminiEmbeddingService(EmbeddingService):
             )
         except ImportError:
             raise RuntimeError(
-                "google-generativeai is not installed. "
-                "Run: pip install google-generativeai"
+                "google-genai is not installed. Run: pip install google-genai"
             )
 
     async def unload(self) -> None:
@@ -79,7 +75,8 @@ class GeminiEmbeddingService(EmbeddingService):
 
     def embed_crops(self, crops: dict[str, Image.Image]) -> list[float]:
         """
-        Embed tight + medium crops and return the averaged 3072-dim vector.
+        Embed tight + medium crops in a single API call and return the
+        averaged 3072-dim vector.
 
         Called via asyncio.to_thread() from the async search/upsert path.
         """
@@ -96,21 +93,11 @@ class GeminiEmbeddingService(EmbeddingService):
                 f"Using first two crops instead."
             )
 
-        vectors: list[np.ndarray] = []
-        for crop_name, crop_img in selected.items():
-            try:
-                vec = self._embed_single_image(crop_img, crop_name)
-                vectors.append(vec)
-            except Exception as e:
-                logger.error(f"Failed to embed '{crop_name}' crop: {e}")
-                raise
+        embeddings = self._embed_batch(list(selected.values()), list(selected.keys()))
 
-        if not vectors:
-            raise RuntimeError("No crops could be embedded — all API calls failed.")
-
-        averaged = _l2_normalize(np.mean(vectors, axis=0))
+        averaged = _l2_normalize(np.mean(embeddings, axis=0))
         logger.debug(
-            f"Embedded {len(vectors)} crops ({list(selected.keys())}), "
+            f"Embedded {len(embeddings)} crops ({list(selected.keys())}), "
             f"final dim: {len(averaged)}"
         )
         return averaged.astype(np.float32).tolist()
@@ -119,37 +106,41 @@ class GeminiEmbeddingService(EmbeddingService):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _embed_single_image(self, img: Image.Image, name: str) -> np.ndarray:
-        """Send one image to the Gemini Embedding API with retry/backoff."""
-        b64_data = _image_to_base64_jpeg(img)
+    def _embed_batch(self, images: list[Image.Image], names: list[str]) -> list[np.ndarray]:
+        """
+        Send all images in a single Gemini API call.
+        Returns one 3072-dim vector per image.
+        """
+        from google.genai import types
 
-        content = {
-            "parts": [
-                {
-                    "inline_data": {
-                        "mime_type": "image/jpeg",
-                        "data": b64_data,
-                    }
-                }
-            ]
-        }
+        contents = [
+            types.Part.from_bytes(data=_image_to_bytes(img), mime_type="image/jpeg")
+            for img in images
+        ]
+        config = types.EmbedContentConfig(
+            task_type="SEMANTIC_SIMILARITY",
+            output_dimensionality=self.output_dimensionality,
+        )
 
         backoff = self.initial_backoff
         last_error: Exception | None = None
 
         for attempt in range(1, self.max_retries + 1):
             try:
-                result = self._genai.embed_content(
+                result = self._client.models.embed_content(
                     model=self.model,
-                    content=content,
-                    task_type="SEMANTIC_SIMILARITY",
-                    output_dimensionality=self.output_dimensionality,
+                    contents=contents,
+                    config=config,
                 )
-                vec = np.array(result["embedding"], dtype=np.float32)
+                vecs = [
+                    _l2_normalize(np.array(e.values, dtype=np.float32))
+                    for e in result.embeddings
+                ]
                 logger.debug(
-                    f"Embedded '{name}' crop in attempt {attempt}, dim={len(vec)}"
+                    f"Batch embedded {len(vecs)} crops {names} "
+                    f"(attempt {attempt}), dim={len(vecs[0])}"
                 )
-                return _l2_normalize(vec)
+                return vecs
 
             except Exception as e:
                 last_error = e
@@ -161,14 +152,14 @@ class GeminiEmbeddingService(EmbeddingService):
 
                 if not is_retryable or attempt == self.max_retries:
                     logger.error(
-                        f"Gemini embed failed for '{name}' crop "
+                        f"Gemini embed failed for crops {names} "
                         f"(attempt {attempt}/{self.max_retries}): {e}"
                     )
                     raise
 
                 logger.warning(
                     f"Gemini embed attempt {attempt}/{self.max_retries} failed "
-                    f"for '{name}' crop: {e}. Retrying in {backoff:.1f}s..."
+                    f"for crops {names}: {e}. Retrying in {backoff:.1f}s..."
                 )
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 30.0)

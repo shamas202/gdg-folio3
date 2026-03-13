@@ -103,16 +103,13 @@ class PineconeVectorRepository:
             namespace=namespace,
             filter=metadata_filter,
             include_metadata=include_metadata,
-            include_values=True,  # Explicitly include vector values for reranking
+            include_values=False,  # Not needed — Pinecone already ranks by cosine similarity
         )
         matches = res.get("matches") or []
         
-        # Filter out any matches without values (shouldn't happen, but safety check)
-        valid_matches = [m for m in matches if "values" in m and len(m.get("values", [])) > 0]
+        logger.debug(f"Retrieved {len(matches)} matches from namespace '{namespace}'")
         
-        logger.debug(f"Retrieved {len(valid_matches)} valid matches from namespace '{namespace}'")
-        
-        return valid_matches
+        return matches
     
     def get_stats(self, category: str | None = None) -> dict[str, Any]:
         """

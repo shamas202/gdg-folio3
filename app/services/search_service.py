@@ -18,7 +18,6 @@ from app.services.detection import DetectionService
 from app.services.segmentation import SegmentationService
 from app.services.embedding import EmbeddingService
 from app.services.attributes import AttributeService
-from app.services.rerank import RerankService
 from app.repositories.pinecone_repo import PineconeVectorRepository
 
 
@@ -32,7 +31,6 @@ class SearchService:
     embedding: EmbeddingService
     attributes: AttributeService
     vectors: PineconeVectorRepository
-    rerank: RerankService
 
     async def upsert_catalog_image(
         self,
@@ -345,23 +343,11 @@ class SearchService:
         with timed("Embedding"):
             query_vector = await asyncio.to_thread(self.embedding.embed_crops, crops)
         
-        # Estimate catalog size
-        catalog_size = await self._estimate_catalog_size(query_category)
-        
-        if catalog_size > 50000:
-            candidate_k = min(max(top_k * 40, 1000), 5000)
-        elif catalog_size > 10000:
-            candidate_k = min(max(top_k * 30, 500), 2000)
-        else:
-            candidate_k = min(max(top_k * 15, 100), 1000)
-        
-        logger.info(f"Retrieving {candidate_k} candidates (catalog: {catalog_size:,})")
-
         with timed("Vector search"):
             candidates = await asyncio.to_thread(
                 self.vectors.query,
                 vector=query_vector,
-                top_k=candidate_k,
+                top_k=top_k,
                 category=query_category,
             )
         
@@ -377,46 +363,25 @@ class SearchService:
                 message=message
             )
 
-        with timed("Reranking"):
-            rerank_k = top_k * 3
-            reranked = self.rerank.rerank(
-                query_vector=query_vector,
-                candidates=candidates,
-                top_k=rerank_k,
-                exact_first=True,
-            )
-        
-        if not reranked:
-            return SearchResponse(
-                query_category=query_category,
-                hits=[],
-                message="No relevant products found"
-            )
-
-        # Deduplicate and return top_k
-        seen_ids = {}
-        for c in reranked:
+        # Deduplicate by product id and return top_k (Pinecone already ranks by cosine similarity)
+        seen_ids: dict[str, dict] = {}
+        for c in candidates:
             product_id = c.get("id")
-            if product_id and product_id not in seen_ids:
-                seen_ids[product_id] = c
-            elif product_id and c["final_score"] > seen_ids[product_id]["final_score"]:
+            if not product_id:
+                continue
+            if product_id not in seen_ids or c["score"] > seen_ids[product_id]["score"]:
                 seen_ids[product_id] = c
 
-        unique_reranked = sorted(
-            seen_ids.values(),
-            key=lambda x: x["final_score"],
-            reverse=True
-        )[:top_k]
-        
-        logger.info(f"After deduplication: {len(unique_reranked)} unique products")
+        top_candidates = sorted(seen_ids.values(), key=lambda x: x["score"], reverse=True)[:top_k]
+        logger.info(f"Returning {len(top_candidates)} unique products")
 
         hits = []
-        for candidate in unique_reranked:
+        for candidate in top_candidates:
             metadata = candidate.get("metadata", {})
             hits.append(
                 SearchHit(
                     pinecone_id=candidate["id"],
-                    score=candidate["final_score"],
+                    score=candidate["score"],
                     image_url=metadata.get("image_url", ""),
                     product_url=metadata.get("product_url", ""),
                     name_english=metadata.get("name_english", ""),
@@ -590,34 +555,12 @@ class SearchService:
         
         logger.debug(f"Query vector norm: {np.linalg.norm(query_vector):.3f}")
 
-        # Adaptive candidate count based on catalog size for optimal recall
-        # For large catalogs (50K+), retrieve more candidates to ensure relevant items aren't missed
-        catalog_size = await self._estimate_catalog_size(query_category)
-        
-        if catalog_size > 50000:
-            # Very large catalog (50K+): Retrieve more candidates
-            candidate_multiplier = 40
-            candidate_k = min(max(top_k * candidate_multiplier, 1000), 5000)
-        elif catalog_size > 10000:
-            # Large catalog (10K-50K): Moderate increase
-            candidate_multiplier = 30
-            candidate_k = min(max(top_k * candidate_multiplier, 500), 2000)
-        else:
-            # Small/Medium catalog (<10K): Standard retrieval
-            candidate_multiplier = 15
-            candidate_k = min(max(top_k * candidate_multiplier, 100), 1000)
-        
-        logger.info(
-            f"Catalog size estimate: {catalog_size:,} products, "
-            f"retrieving {candidate_k} candidates (multiplier: {candidate_multiplier}x)"
-        )
-
         with timed("Vector search"):
             candidates = await asyncio.to_thread(
                 self.vectors.query,
                 vector=query_vector,
-                top_k=candidate_k,
-                category=query_category,  # Use category-based namespace for fast search
+                top_k=top_k,
+                category=query_category,
             )
         
         logger.info(f"Retrieved {len(candidates)} candidates from Pinecone (namespace: {query_category or 'default'})")
@@ -635,70 +578,26 @@ class SearchService:
                 message=message
             )
 
-        with timed("Reranking"):
-            # Get extra results for deduplication
-            rerank_k = top_k * 3
-            reranked = self.rerank.rerank(
-                query_vector=query_vector,
-                candidates=candidates,
-                top_k=rerank_k,
-                exact_first=True,
-            )
-        
-        logger.info(f"Reranked to {len(reranked)} results")
-        if reranked:
-            logger.debug(
-                f"Score range: {reranked[0]['final_score']:.3f} (best) to "
-                f"{reranked[-1]['final_score']:.3f} (worst)"
-            )
-
-        # Check if reranking resulted in no hits
-        if not reranked:
-            message = "No relevant products found"
-            if query_category:
-                message += f" for category '{query_category}'"
-            message += ". Try adjusting your search criteria or use a different image."
-            logger.warning(message)
-            return SearchResponse(
-                query_category=query_category,
-                hits=[],
-                message=message
-            )
-
-        # Deduplicate by pinecone_id (since each product has unique pinecone_id, 
-        # this effectively removes duplicate vector entries if any exist)
-        seen_ids = {}
-        for c in reranked:
-            # Get pinecone_id from the vector id (stored in 'id' field)
+        # Deduplicate by product id and return top_k (Pinecone already ranks by cosine similarity)
+        seen_ids: dict[str, dict] = {}
+        for c in candidates:
             product_id = c.get("id")
             if not product_id:
                 logger.warning("Skipping result without ID")
                 continue
-                
-            if product_id not in seen_ids:
-                seen_ids[product_id] = c
-            elif c["final_score"] > seen_ids[product_id]["final_score"]:
-                # Replace with higher scoring instance
+            if product_id not in seen_ids or c["score"] > seen_ids[product_id]["score"]:
                 seen_ids[product_id] = c
 
-        # Take top K unique products
-        unique_reranked = sorted(
-            seen_ids.values(),
-            key=lambda x: x["final_score"],
-            reverse=True
-        )[:top_k]
-        
-        logger.info(f"After deduplication: {len(unique_reranked)} unique products")
+        top_candidates = sorted(seen_ids.values(), key=lambda x: x["score"], reverse=True)[:top_k]
+        logger.info(f"Returning {len(top_candidates)} unique products")
 
-        # Build response hits with new metadata structure
         hits = []
-        for c in unique_reranked:
+        for c in top_candidates:
             metadata = c.get("metadata", {})
-            
             hits.append(
                 SearchHit(
                     pinecone_id=c.get("id", "unknown"),
-                    score=float(c["final_score"]),
+                    score=float(c["score"]),
                     image_url=metadata.get("image_url"),
                     product_url=metadata.get("product_url"),
                     name_english=metadata.get("name_english"),
@@ -714,34 +613,3 @@ class SearchService:
             )
 
         return SearchResponse(query_category=query_category, hits=hits)
-    
-    async def _estimate_catalog_size(self, category: str | None) -> int:
-        """
-        Estimate catalog size for the given category to optimize candidate retrieval.
-        
-        For large catalogs (50K+), we need to retrieve more candidates to ensure
-        relevant items aren't missed during ANN search.
-        
-        Args:
-            category: Category to estimate size for (None = all categories)
-            
-        Returns:
-            Approximate number of products in the catalog
-        """
-        from loguru import logger
-        
-        try:
-            # Get index stats from Pinecone (run in thread pool to avoid blocking)
-            stats = await asyncio.to_thread(self.vectors.get_stats, category=category)
-            vector_count = stats.get('total_vector_count', 1000)
-            
-            logger.debug(
-                f"Catalog size for category '{category or 'all'}': {vector_count:,} vectors"
-            )
-            
-            return vector_count
-            
-        except Exception as e:
-            logger.warning(f"Failed to get catalog size (using default): {e}")
-            # Fallback: assume medium catalog
-            return 5000
