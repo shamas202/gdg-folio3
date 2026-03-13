@@ -138,19 +138,14 @@ ROA_THRESHOLDS = {
     },
 }
 
-# === CROP GENERATION SETTINGS - 3-TIER SYSTEM ===
+# === CROP GENERATION SETTINGS ===
 
 # Medium crop padding (fixed ratio)
 MEDIUM_PADDING_RATIO = 0.15  # 15% padding around object
 
-# Augmentation settings
-ROTATION_ANGLES = [-5, 5]  # Subtle tilts in degrees (realistic camera angles)
-ENABLE_HORIZONTAL_FLIP = True  # Mirror images (left/right viewpoint)
-ENABLE_VERTICAL_FLIP = False  # Products upside-down is unnatural
-
-# Crop strategy per tier
+# Crop strategy: tight + medium for all tiers (2 Gemini API calls per object)
 CROP_STRATEGY = {
-    "small": ["tight"],                  # Small: tight only (4 crops)
-    "medium": ["tight"],                 # Medium: tight only (4 crops)
-    "large": ["tight", "medium", "full"],  # Large: all crops (9 crops)
+    "small": ["tight", "medium"],
+    "medium": ["tight", "medium"],
+    "large": ["tight", "medium"],
 }

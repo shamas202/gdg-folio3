@@ -44,8 +44,8 @@ export function SearchResults({ hits, message }: SearchResultsProps) {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-neutral-900 mb-2">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-neutral-900 mb-1">
           Search Results
         </h1>
         <p className="text-neutral-600">
@@ -53,10 +53,16 @@ export function SearchResults({ hits, message }: SearchResultsProps) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {hits.map((hit, index) => (
-          <ProductCard key={`${hit.pinecone_id}-${index}`} hit={hit} rank={index + 1} />
-        ))}
+      {/* navbar=64px + page pt-8=32px + heading block≈96px = 192px above this div */}
+      <div
+        className="overflow-y-scroll border border-neutral-100 rounded-lg p-2"
+        style={{ height: "calc(100vh - 210px)" }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-4">
+          {hits.map((hit, index) => (
+            <ProductCard key={`${hit.pinecone_id}-${index}`} hit={hit} rank={index + 1} />
+          ))}
+        </div>
       </div>
     </div>
   );

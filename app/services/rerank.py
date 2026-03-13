@@ -25,7 +25,7 @@ class RerankService(ABC):
 @dataclass
 class VisualCrossEncoderRerankService(RerankService):
     """
-    Final human-like ranking using visual cross-encoder logic.
+    Single-stage reranker using plain cosine similarity on 3072-dim Gemini vectors.
     """
 
     matcher: VisualCrossEncoder
@@ -40,30 +40,21 @@ class VisualCrossEncoderRerankService(RerankService):
     ) -> list[dict[str, Any]]:
         if not query_vector:
             return []
-        
+
         q = np.array(query_vector, dtype=np.float32)
-        if q.shape[0] == 0:
-            return []
+        q = q / (np.linalg.norm(q) + 1e-12)
 
         reranked = []
         for c in candidates:
-            # Validate candidate has values and they're not empty
             if "values" not in c or not c["values"]:
                 continue
-            
+
             vec = np.array(c["values"], dtype=np.float32)
-            
-            # Skip if vector is empty or shape mismatch
             if vec.shape[0] == 0 or vec.shape[0] != q.shape[0]:
                 continue
 
-            score = self.matcher.score(
-                q,
-                vec,
-                exact_weight=1.0 if exact_first else 0.6,
-                semantic_weight=0.4 if exact_first else 1.0,
-            )
-            c["final_score"] = score
+            score = float(np.dot(q, vec / (np.linalg.norm(vec) + 1e-12)))
+            c["final_score"] = max(0.0, score)
             reranked.append(c)
 
         reranked.sort(key=lambda x: x["final_score"], reverse=True)

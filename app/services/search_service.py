@@ -164,60 +164,25 @@ class SearchService:
             segment = await self.segmentation.segment(img, bbox, mask_polygon=mask_polygon)
         
         with timed("Crop generation and Masking"):
-            # Generate ALL base crops (tight, medium, full) and their bboxes
+            # Generate base crops (tight + medium) and their bboxes
             base_crops, base_bboxes = self.preprocessing.crop_base(img, bbox)
-            
-            # === CATEGORY-BASED CROP SELECTION (3-TIER) ===
-            if category_lower in SMALL_CATEGORIES:
-                # Small objects: tight only (background is noise)
-                crops_to_process = ["tight"]
-                logger.info(
-                    f"📦 Small object '{assigned_category}': Generating TIGHT crop only "
-                    f"(4 crops, background is noise)"
-                )
-            elif category_lower in MEDIUM_CATEGORIES:
-                # Medium objects: tight only (background mostly noise)
-                crops_to_process = ["tight"]
-                logger.info(
-                    f"📦 Medium object '{assigned_category}': Generating TIGHT crop only "
-                    f"(4 crops, standard product shot)"
-                )
-            elif category_lower in LARGE_CATEGORIES:
-                # Large objects: all crops (context helps matching)
-                crops_to_process = ["tight", "medium", "full"]
-                logger.info(
-                    f"📦 Large object '{assigned_category}': Generating ALL crops "
-                    f"(9 crops: tight + medium + full, lifestyle context)"
-                )
-            else:
-                # Should never happen (already validated in ROA section)
-                raise BadRequest(f"Unknown category '{assigned_category}'")
-            
-            # Filter crops to only those needed for this category
-            filtered_crops = {k: v for k, v in base_crops.items() if k in crops_to_process}
+
+            # All categories: tight (masked) + medium (unmasked)
+            crops_to_process = ["tight", "medium"]
+            logger.info(f"Generating tight + medium crops for '{assigned_category}'")
+
+            crops = {k: v for k, v in base_crops.items() if k in crops_to_process}
             filtered_bboxes = {k: v for k, v in base_bboxes.items() if k in crops_to_process}
-            
-            # === MASKING: TIGHT CROP ONLY ===
-            # Always mask tight crop for pure object features
-            filtered_crops["tight"] = self.preprocessing.apply_mask_on_crop(
-                filtered_crops["tight"], 
-                segment.mask, 
+
+            # Tight crop: mask applied (white background, pure object)
+            crops["tight"] = self.preprocessing.apply_mask_on_crop(
+                crops["tight"],
+                segment.mask,
                 bbox=filtered_bboxes["tight"]
             )
-            # Medium and full crops remain unmasked (natural context preserved)
-            
-            logger.debug(
-                f"Masking: tight=masked, "
-                f"{'medium+full=unmasked' if len(crops_to_process) > 1 else 'no other crops'}"
-            )
+            # Medium crop: unmasked (natural context preserved)
 
-            # Generate augmentations (±5° rotations + horizontal flip)
-            crops = self.preprocessing.add_rotated_crops(filtered_crops)
-            
-            logger.info(
-                f"✅ Generated {len(crops)} total crops "
-                f"({len(filtered_crops)} base + {len(crops) - len(filtered_crops)} augmented)"
-            )
+            logger.info(f"Generated {len(crops)} crops (tight=masked, medium=unmasked)")
 
         # DEBUG: Save all crops to debug directory for first 3 items
         try:
@@ -336,39 +301,25 @@ class SearchService:
         
         # NOTE: ROA validation SKIPPED for retrieval (user-friendly)
         
-        # Generate crops based on detected category
+        # Generate tight + medium crops for all categories
         with timed("Crop generation and Masking"):
             base_crops, base_bboxes = self.preprocessing.crop_base(img, bbox)
-            
-            # Category-based crop selection (3-tier)
-            if query_category and query_category in SMALL_CATEGORIES:
-                crops_to_process = ["tight"]
-                logger.info(f"📦 Small object '{query_category}': 4 crops")
-            elif query_category and query_category in MEDIUM_CATEGORIES:
-                crops_to_process = ["tight"]
-                logger.info(f"📦 Medium object '{query_category}': 4 crops")
-            elif query_category and query_category in LARGE_CATEGORIES:
-                crops_to_process = ["tight", "medium", "full"]
-                logger.info(f"📦 Large object '{query_category}': 9 crops")
-            else:
-                # Unknown category: default to tight only
-                crops_to_process = ["tight"]
-                logger.warning(f"Unknown category '{query_category}', using 4 crops")
-            
-            filtered_crops = {k: v for k, v in base_crops.items() if k in crops_to_process}
+
+            crops_to_process = ["tight", "medium"]
+            logger.info(f"Generating tight + medium crops for '{query_category}'")
+
+            crops = {k: v for k, v in base_crops.items() if k in crops_to_process}
             filtered_bboxes = {k: v for k, v in base_bboxes.items() if k in crops_to_process}
-            
-            # Mask tight crop only
-            filtered_crops["tight"] = self.preprocessing.apply_mask_on_crop(
-                filtered_crops["tight"], 
-                segment.mask, 
+
+            # Tight crop: mask applied (white background, pure object)
+            crops["tight"] = self.preprocessing.apply_mask_on_crop(
+                crops["tight"],
+                segment.mask,
                 bbox=filtered_bboxes["tight"]
             )
-            
-            # Generate augmentations
-            crops = self.preprocessing.add_rotated_crops(filtered_crops)
-            
-            logger.info(f"✅ Generated {len(crops)} crops")
+            # Medium crop: unmasked (natural context preserved)
+
+            logger.info(f"Generated {len(crops)} crops (tight=masked, medium=unmasked)")
         
         # DEBUG: Save all crops to debug directory for visualization
         try:
@@ -588,66 +539,25 @@ class SearchService:
         # NOTE: ROA validation SKIPPED for retrieval (user-friendly)
         # User's room photo framing shouldn't reject their search
         
-        # Generate crops with same pattern as ingestion
+        # Generate tight + medium crops for all categories
         with timed("Crop generation and Masking"):
-            # Generate ALL base crops (tight, medium, full) and their bboxes
             base_crops, base_bboxes = self.preprocessing.crop_base(img, bbox)
-            
-            # === CATEGORY-BASED CROP SELECTION (3-TIER, same as ingestion) ===
-            if query_category and query_category in SMALL_CATEGORIES:
-                # Small objects: tight only (background is noise)
-                crops_to_process = ["tight"]
-                logger.info(
-                    f"📦 Small object '{query_category}': Generating TIGHT crop only "
-                    f"(4 crops)"
-                )
-            elif query_category and query_category in MEDIUM_CATEGORIES:
-                # Medium objects: tight only (background mostly noise)
-                crops_to_process = ["tight"]
-                logger.info(
-                    f"📦 Medium object '{query_category}': Generating TIGHT crop only "
-                    f"(4 crops)"
-                )
-            elif query_category and query_category in LARGE_CATEGORIES:
-                # Large objects: all crops (context helps matching)
-                crops_to_process = ["tight", "medium", "full"]
-                logger.info(
-                    f"📦 Large object '{query_category}': Generating ALL crops "
-                    f"(9 crops: tight + medium + full)"
-                )
-            else:
-                # Unknown category from detection: default to tight only (safe fallback)
-                crops_to_process = ["tight"]
-                logger.warning(
-                    f"Unknown detected category '{query_category}', "
-                    f"using tight only (4 crops)"
-                )
-            
-            # Filter crops to only those needed
-            filtered_crops = {k: v for k, v in base_crops.items() if k in crops_to_process}
+
+            crops_to_process = ["tight", "medium"]
+            logger.info(f"Generating tight + medium crops for '{query_category}'")
+
+            crops = {k: v for k, v in base_crops.items() if k in crops_to_process}
             filtered_bboxes = {k: v for k, v in base_bboxes.items() if k in crops_to_process}
-            
-            # === MASKING: TIGHT CROP ONLY ===
-            # Always mask tight crop for pure object features
-            filtered_crops["tight"] = self.preprocessing.apply_mask_on_crop(
-                filtered_crops["tight"], 
-                segment.mask, 
+
+            # Tight crop: mask applied (white background, pure object)
+            crops["tight"] = self.preprocessing.apply_mask_on_crop(
+                crops["tight"],
+                segment.mask,
                 bbox=filtered_bboxes["tight"]
             )
-            # Medium and full crops remain unmasked (natural context preserved)
-            
-            logger.debug(
-                f"Masking: tight=masked, "
-                f"{'medium+full=unmasked' if len(crops_to_process) > 1 else 'no other crops'}"
-            )
+            # Medium crop: unmasked (natural context preserved)
 
-            # Generate augmentations (±5° rotations + horizontal flip)
-            crops = self.preprocessing.add_rotated_crops(filtered_crops)
-            
-            logger.info(
-                f"✅ Generated {len(crops)} total crops "
-                f"({len(filtered_crops)} base + {len(crops) - len(filtered_crops)} augmented)"
-            )
+            logger.info(f"Generated {len(crops)} crops (tight=masked, medium=unmasked)")
         
         # Validate crops are not empty
         for crop_name, crop_img in crops.items():

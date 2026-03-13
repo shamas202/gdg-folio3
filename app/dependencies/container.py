@@ -18,8 +18,8 @@ from app.services.segmentation import (
     SAMLikeSegmentationService,
 )
 from app.services.segmentation_polygon import PolygonSegmentationService
-from app.services.embedding import EmbeddingService, HFEmbeddingService
-from app.services.embedding_multiscale import MultiScaleEmbeddingService
+from app.services.embedding import EmbeddingService
+from app.services.embedding_gemini import GeminiEmbeddingService
 from app.services.attributes import AttributeService
 
 from app.services.visual_matcher import VisualCrossEncoder
@@ -66,7 +66,7 @@ class Container:
     @classmethod
     def from_settings(cls, settings: Settings) -> "Container":
         from loguru import logger
-        
+
         # ---- Image & Preprocessing ----
         image_io = ImageIOService(
             catalog_images_dir=Path(settings.catalog_images_dir),
@@ -75,16 +75,14 @@ class Container:
             max_dimension=settings.image_max_dimension,
             max_file_size_mb=settings.image_max_size_mb,
         )
-        
-        preprocessing = PreprocessingService(
-            enable_rotation_aug=settings.enable_rotation_augmentation,
-        )
+
+        preprocessing = PreprocessingService()
 
         # ---- Detection (Furniture/Products) ----
         detection_mode = settings.detection_mode.lower()
-        
+
         if detection_mode == "runpod":
-            # Use RunPod RF-DETR API (primary)
+            # Use RF-DETR HTTP endpoint (local GPU server or RunPod)
             detection = RFDETRDetectionService(
                 api_url=settings.runpod_api_url,
                 status_url=settings.runpod_status_url,
@@ -92,15 +90,15 @@ class Container:
                 confidence_threshold=settings.runpod_confidence_threshold,
                 max_wait_seconds=settings.runpod_max_wait_seconds,
             )
-            logger.info("Using RF-DETR via RunPod API for detection")
+            logger.info(f"Using RF-DETR endpoint for detection: {settings.runpod_api_url}")
         else:
-            # Use local RT-DETR (fallback)
+            # Use local RT-DETR .pt file via ultralytics
             try:
                 detection = RTDETRDetectionService(model_path=settings.rtdetr_model_path)
                 logger.info("Using local RT-DETR for detection")
             except FileNotFoundError as e:
                 logger.error(f"Local RT-DETR model not found: {e}")
-                logger.warning("Falling back to RunPod RF-DETR API")
+                logger.warning("Falling back to RF-DETR HTTP endpoint")
                 detection = RFDETRDetectionService(
                     api_url=settings.runpod_api_url,
                     status_url=settings.runpod_status_url,
@@ -109,48 +107,28 @@ class Container:
                     max_wait_seconds=settings.runpod_max_wait_seconds,
                 )
 
-        # ---- Segmentation (Mask-aware) ----
-        # Use polygon segmentation if RF-DETR API is used (provides polygon masks)
-        # Otherwise use SAM2.1 or GrabCut
+        # ---- Segmentation ----
         if detection_mode == "runpod":
             segmentation = PolygonSegmentationService()
-            logger.info("Using polygon segmentation (from RF-DETR API masks)")
+            logger.info("Using polygon segmentation (RF-DETR polygon masks)")
         else:
-            # Try to use SAM2.1 (Ultralytics) if available, fallback to GrabCut
             try:
-                segmentation = SAM2SegmentationService(
-                    model_path=settings.sam2_model_path,
-                )
-                logger.info("Using SAM2.1 (Ultralytics) for segmentation")
+                segmentation = SAM2SegmentationService(model_path=settings.sam2_model_path)
+                logger.info("Using SAM2.1 for segmentation")
             except (ImportError, FileNotFoundError) as e:
-                logger.warning(f"SAM2.1 not available ({e}), falling back to GrabCut segmentation")
+                logger.warning(f"SAM2.1 not available ({e}), falling back to GrabCut")
                 segmentation = SAMLikeSegmentationService()
 
-        # ---- Embeddings (Instance + Semantic) ----
-        # Use multi-scale embedding for better robustness
-        if settings.enable_multiscale_embedding:
-            # Parse embedding scales from config
-            try:
-                scales = [int(s.strip()) for s in settings.embedding_scales.split(",")]
-            except Exception:
-                scales = [224, 384, 512]  # Default scales
-            
-            embedding = MultiScaleEmbeddingService(
-                instance_model_name=settings.instance_model_name,
-                semantic_model_name=settings.semantic_model_name,
-                target_dim=settings.pinecone_dim,
-                scales=scales,
-                enable_rotation_aug=settings.enable_rotation_augmentation,
-            )
-            logger.info(f"Using multi-scale embedding with scales: {scales}")
-        else:
-            # Standard single-scale embedding
-            embedding = HFEmbeddingService(
-                instance_model_name=settings.instance_model_name,
-                semantic_model_name=settings.semantic_model_name,
-                target_dim=settings.pinecone_dim,
-            )
-            logger.info("Using standard single-scale embedding")
+        # ---- Embeddings (Gemini multimodal API) ----
+        embedding = GeminiEmbeddingService(
+            api_key=settings.google_api_key,
+            model=settings.gemini_embedding_model,
+            output_dimensionality=settings.pinecone_dim,
+        )
+        logger.info(
+            f"Using GeminiEmbeddingService: model={settings.gemini_embedding_model}, "
+            f"dim={settings.pinecone_dim}"
+        )
 
         # ---- Attribute extraction & filtering ----
         attributes = AttributeService()
@@ -164,21 +142,15 @@ class Container:
             dimension=settings.pinecone_dim,
         )
 
-        # ---- Visual Cross-Encoder Reranker ----
+        # ---- Reranker (plain cosine similarity) ----
         visual_matcher = VisualCrossEncoder()
-        
-        # Use multi-stage reranking for large catalogs
+
         if settings.enable_multistage_rerank:
-            rerank = HybridRerankService(
-                matcher=visual_matcher
-            )
-            logger.info("Using hybrid multi-stage reranking (adaptive based on catalog size)")
+            rerank = HybridRerankService(matcher=visual_matcher)
+            logger.info("Using hybrid multi-stage reranking")
         else:
-            # Standard single-stage reranking
-            rerank = VisualCrossEncoderRerankService(
-                matcher=visual_matcher
-            )
-            logger.info("Using standard single-stage reranking")
+            rerank = VisualCrossEncoderRerankService(matcher=visual_matcher)
+            logger.info("Using single-stage reranking")
 
         # ---- Search Orchestration ----
         search_service = SearchService(
@@ -210,19 +182,15 @@ class Container:
     # Lifecycle Hooks
     # ----------------------------
     async def start(self) -> None:
-        """
-        Called on FastAPI startup.
-        """
+        """Called on FastAPI startup."""
         await self.vectors.ensure_index()
         await self.embedding.load()
 
     async def stop(self) -> None:
-        """
-        Called on FastAPI shutdown.
-        """
+        """Called on FastAPI shutdown."""
         await self.embedding.unload()
-        
-        # Close RunPod HTTP client if using RF-DETR detection
+
+        # Close RF-DETR HTTP client if applicable
         if hasattr(self.detection, '_close_client'):
             await self.detection._close_client()
 

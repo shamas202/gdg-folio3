@@ -69,7 +69,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-12">
+    <div className="container mx-auto px-4 pt-8">
       <SearchResults hits={results.hits} message={results.message} />
     </div>
   );

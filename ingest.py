@@ -144,10 +144,10 @@ class CatalogIngester:
     
     def __init__(
         self,
-        api_base_url: str = "http://localhost:8000",
+        api_base_url: str = "http://localhost:8001",
         timeout: float = 300.0,
         max_retries: int = 3,
-        max_workers: int = 6,
+        max_workers: int = 8,
     ):
         self.api_base_url = api_base_url.rstrip("/")
         self.timeout = timeout
