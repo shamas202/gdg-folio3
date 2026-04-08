@@ -82,8 +82,8 @@ LARGE_CATEGORIES = [
 # === IMAGE QUALITY THRESHOLDS ===
 
 # File & Dimension Limits
-MAX_FILE_SIZE_MB = 15
-MIN_DIMENSION_UNIVERSAL = 500  # Both width AND height for ALL categories
+MAX_FILE_SIZE_MB = 10
+MIN_DIMENSION_UNIVERSAL = 300  # Both width AND height for ALL categories
 MAX_DIMENSION = 4096  # Auto-resize if exceeded
 
 # Blur Detection (Laplacian Variance) - 3-TIER SYSTEM

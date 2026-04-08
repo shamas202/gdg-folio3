@@ -9,7 +9,7 @@ import json
 from fastapi import UploadFile
 
 from app.core.errors import BadRequest
-from app.core.constants import SMALL_CATEGORIES, MEDIUM_CATEGORIES, LARGE_CATEGORIES, ROA_THRESHOLDS
+from app.core.constants import SMALL_CATEGORIES, MEDIUM_CATEGORIES, LARGE_CATEGORIES
 from app.core.config import Settings
 from app.models.schemas import BBox, CatalogUpsertResponse, SearchHit, SearchResponse
 from app.services.image_io import ImageIOService
@@ -111,44 +111,14 @@ class SearchService:
             f"(category: {det.category}, score: {det.score:.3f})"
         )
         
-        # === STAGE 2: ROA (Ratio of Area) VALIDATION ===
-        # Only for ingestion - ensures proper product framing
         bbox_width = bbox.x2 - bbox.x1
         bbox_height = bbox.y2 - bbox.y1
         bbox_area = bbox_width * bbox_height
         roa = bbox_area / image_area
-        
         logger.info(
             f"Object size: {bbox_width:.0f}×{bbox_height:.0f}px, "
             f"ROA: {roa:.1%} (bbox area / image area)"
         )
-        
-        # Category-based ROA thresholds (3-tier system)
-        category_lower = assigned_category.lower().strip()
-        
-        if category_lower in SMALL_CATEGORIES:
-            min_roa = ROA_THRESHOLDS["small"]["min"]  # 0.06 (6%)
-            cat_size = "small"
-        elif category_lower in MEDIUM_CATEGORIES:
-            min_roa = ROA_THRESHOLDS["medium"]["min"]  # 0.08 (8%)
-            cat_size = "medium"
-        elif category_lower in LARGE_CATEGORIES:
-            min_roa = ROA_THRESHOLDS["large"]["min"]  # 0.12 (12%)
-            cat_size = "large"
-        else:
-            # Should never happen (get_category_requirements would have failed)
-            raise BadRequest(f"Unknown category '{assigned_category}'")
-        
-        # Validate ROA - reject if object too small/distant
-        if roa < min_roa:
-            raise BadRequest(
-                f"Object too small or distant in image (ROA: {roa:.1%}). "
-                f"The {assigned_category} occupies only {roa:.1%} of the image. "
-                f"Minimum required for {cat_size} objects: {min_roa:.0%}. "
-                f"Please take a closer photo with the product as the main subject."
-            )
-        
-        logger.info(f"✓ ROA validation passed: {roa:.1%} ≥ {min_roa:.0%} for {cat_size} objects")
         
         if not mask_polygon:
             raise BadRequest(
