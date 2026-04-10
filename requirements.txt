@@ -16,6 +16,9 @@ opencv-python>=4.10.0.84
 ultralytics>=8.3.0
 # Embeddings
 google-genai>=1.0.0
+# Cross-platform TLS trust for HTTPS API clients
+truststore>=0.10.0
+certifi>=2024.0.0
 # Ingestion utilities
 pandas>=2.0.0
 openpyxl>=3.1.0

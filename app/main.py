@@ -1,3 +1,6 @@
+import os
+
+import certifi
 from fastapi import FastAPI, Request, status
 from fastapi.responses import ORJSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -9,6 +12,18 @@ from app.core.config import Settings
 from app.core.errors import BadRequest, DependencyError
 from app.core.lifespan import build_lifespan
 from app.core.logging import configure_logging
+
+
+# Optional cross-platform trust store injection.
+# If truststore isn't installed yet, app still boots with certifi bundle.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
+os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
 
 
 def create_app() -> FastAPI:
