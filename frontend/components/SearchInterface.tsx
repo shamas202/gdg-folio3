@@ -22,20 +22,6 @@ export function SearchInterface() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = [
-    "chair", "2-seater-sofa", "l-shape-sofa", "sofa",
-    "bed", "bedspread", "pillow", "mattresses",
-    "service-table", "center-table", "side-table", "console",
-    "dressing-table", "comforter", "tv-table", "dining-table",
-    "storage-box", "carpet", "flower-pot-and-plant", "statue-and-antique",
-    "laundry-basket", "candle", "vase", "flower",
-    "wall-clock", "shelve", "decorative-hanger", "lighting",
-    "lampshade", "floor-stand", "wall-lighting", "outdoor-lighting",
-    "chandelier", "pendant-lighting", "coffee-maker", "cooking-appliance",
-    "food-processor", "cooking-pot", "serving-utensil-and-tray",
-    "cup", "plate", "chaise-lounge", "art-canvas", "office-table", "office-chair"
-  ];
-
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -389,7 +375,7 @@ function ProductImageModal({
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const imageUrl = product.image_url || null;
-  const productName = product.name_english || product.name_arabic || product.pinecone_id;
+  const productName = product.product_name || product.name_english || product.name_arabic || product.pinecone_id;
 
   // Close on Escape key
   useEffect(() => {
@@ -416,13 +402,11 @@ function ProductImageModal({
           <div>
             <h3 className="text-lg font-bold text-neutral-900">{productName}</h3>
             {product.category && (
-              <p className="text-sm text-neutral-600 capitalize">{product.category.replace(/-/g, ' ')}</p>
+              <p className="text-sm text-neutral-600 capitalize">{product.category.replace(/-/g, " ")}</p>
             )}
-            {product.price_amount && (
-              <p className="text-sm font-semibold text-primary-600 mt-1">
-                {product.price_amount} {product.price_unit || 'SAR'}
-              </p>
-            )}
+            <p className="text-sm font-medium text-primary-600 mt-1">
+              {Math.round(product.score * 100)}% match
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -485,7 +469,7 @@ function ProductCard({ hit, onImageClick }: { hit: SearchHit; onImageClick: () =
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const imageUrl = hit.image_url || null;
-  const productName = hit.name_english || hit.name_arabic || hit.pinecone_id;
+  const productName = hit.product_name || hit.name_english || hit.name_arabic || hit.pinecone_id;
 
   return (
     <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden hover:shadow-md transition-shadow">
@@ -525,16 +509,14 @@ function ProductCard({ hit, onImageClick }: { hit: SearchHit; onImageClick: () =
           <h4 className="font-semibold text-sm text-neutral-900 mb-1 truncate" title={productName}>
             {productName}
           </h4>
-          {hit.price_amount && (
-            <p className="text-xs font-semibold text-primary-600 mb-1">
-              {hit.price_amount} {hit.price_unit || 'SAR'}
-            </p>
-          )}
           {hit.category && (
-            <p className="text-xs text-neutral-500 capitalize">
-              {hit.category.replace(/-/g, ' ')}
+            <p className="text-xs text-neutral-500 capitalize mb-1">
+              {hit.category.replace(/-/g, " ")}
             </p>
           )}
+          <p className="text-xs text-primary-600 font-medium">
+            {Math.round(hit.score * 100)}% match
+          </p>
         </div>
       </div>
     </div>

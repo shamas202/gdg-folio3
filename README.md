@@ -1,87 +1,84 @@
-# 🔍 Image Search - Visual Product Discovery System
+# Interior Visual Search
 
-A production-ready visual search system for e-commerce catalogs, powered by RF-DETR detection, polygon segmentation, and multi-scale embeddings.
-
-## 🌟 Features
-
-- **3-Tier Category System**: Optimized processing for small (cups), medium (chairs), and large (sofas) products
-- **Advanced Detection**: RF-DETR with polygon-based segmentation for precise object extraction
-- **Multi-Scale Embeddings**: Dual-tower architecture (ViT + CLIP) for robust visual matching
-- **Smart Validation**: Category-aware quality checks (blur, ROA, contrast)
-- **Fast Search**: Bbox+mask passing eliminates redundant detection (50-70% faster)
-- **White Background Masking**: Consistent embeddings across products
-- **Visual Reranking**: Cross-encoder for fine-grained similarity scoring
+A lightweight visual search system for interior product catalogs. Upload a room photo, click an object, and find similar products — powered by YOLO11n detection and Google Gemini embeddings.
 
 ---
 
-## 📋 Prerequisites
+## Architecture
 
-### System Requirements
+```
+Room photo → YOLO11n detect → tight bbox crop → Gemini embed (3072-dim) → Pinecone search → results
+```
+
+| Component | Technology |
+|-----------|-----------|
+| Detection | YOLO11n (CPU, no GPU required) |
+| Embedding | `gemini-embedding-2-preview` (3072-dim) |
+| Vector store | Pinecone (serverless, cosine similarity) |
+| Backend | FastAPI (Python 3.11+) |
+| Frontend | Next.js 14 + Tailwind CSS |
+
+---
+
+## Supported Categories
+
+YOLO11n COCO classes mapped to search namespaces:
+
+| Input category | YOLO class |
+|----------------|-----------|
+| `chair` | chair |
+| `couch` / `sofa` | couch |
+| `bed` | bed |
+| `dining-table` | dining table |
+| `tv` | tv |
+| `clock` / `wall-clock` | clock |
+| `vase` | vase |
+| `laptop` | laptop |
+| `tennis-racket` | tennis racket |
+
+---
+
+## Prerequisites
+
 - Python 3.11+
-- Node.js 18+ (for frontend)
-- 8GB+ RAM (for embedding models)
-- Internet connection (for RunPod API)
-
-### External Services
-- **RunPod Account**: For RF-DETR detection API ([runpod.ai](https://runpod.ai))
-- **Pinecone Account**: For vector storage ([pinecone.io](https://pinecone.io))
+- Node.js 18+
+- [Pinecone](https://pinecone.io) account (serverless index)
+- [Google AI Studio](https://aistudio.google.com) API key (for Gemini embeddings)
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Clone Repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/saaib8/image-recommendation.git
 cd image-recommendation
 ```
 
-### 2. Backend Setup
+### 2. Backend setup
 
 ```bash
-# Create virtual environment
 python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
-
-# Or use uv (faster)
-pip install uv
-uv pip install -r requirements.txt
 ```
 
-### 3. Configure Environment
+### 3. Configure environment
 
 ```bash
-# Copy template and edit with your API keys
-cp ENV_TEMPLATE.txt .env
-
-# Required configurations in .env:
-# - RUNPOD_API_URL, RUNPOD_API_KEY (for detection)
-# - PINECONE_API_KEY, PINECONE_INDEX_NAME (for vector storage)
+cp .env.example .env
+# Edit .env with your API keys (see Configuration section below)
 ```
 
-### 4. Create Pinecone Index
+### 4. Start backend
 
 ```bash
-# In Pinecone dashboard, create index with:
-# - Name: interior-products (or your choice)
-# - Dimensions: 1024
-# - Metric: cosine
-# - Cloud: aws, Region: us-east-1
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-### 5. Start Backend
-
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Backend available at: `http://localhost:8000`
-
-### 6. Start Frontend
+### 5. Start frontend
 
 ```bash
 cd frontend
@@ -89,251 +86,214 @@ npm install
 npm run dev
 ```
 
-Frontend available at: `http://localhost:3000`
+Frontend: `http://localhost:3000`  
+Backend API docs: `http://localhost:8001/docs`
 
 ---
 
-## 📦 Catalog Ingestion
+## Configuration
 
-### Prepare CSV
+All settings are loaded from `.env`. Copy `.env.example` to get started.
 
-Your CSV must have these columns:
-- `pinecone_id`: Unique product ID
-- `assigned_category`: Product category (see Categories section)
-- `image_url`: URL to product image
-- `name_english`, `name_arabic`: Product names
-- `price_amount`, `price_unit`: Pricing info
-- `product_url`, `store_id`, `countries`, `store`: Metadata
+```env
+# Pinecone
+PINECONE_API_KEY=your_pinecone_api_key
+PINECONE_INDEX_NAME=interior-products-gemini   # must be 3072-dim, cosine
+PINECONE_CLOUD=aws
+PINECONE_REGION=us-east-1
+PINECONE_DIM=3072
 
-### Run Ingestion
+# Google Gemini
+GOOGLE_API_KEY=your_google_api_key
+GEMINI_EMBEDDING_MODEL=models/gemini-embedding-2-preview
+
+# Detection
+DETECTION_CONFIDENCE_THRESHOLD=0.15   # YOLO11n confidence (0.0–1.0)
+
+# Image validation
+IMAGE_MIN_DIMENSION=300    # minimum px on each side
+IMAGE_MAX_DIMENSION=4096
+IMAGE_MAX_SIZE_MB=10
+
+# Search
+SEARCH_CANDIDATE_MULTIPLIER=15
+```
+
+### Pinecone index setup
+
+Create a serverless index in Pinecone dashboard with:
+- **Dimensions**: 3072
+- **Metric**: cosine
+- **Cloud / Region**: aws / us-east-1 (or your preferred region)
+
+---
+
+## Catalog Ingestion
+
+### Option A — via UI (single product)
+
+1. Open `http://localhost:3000/add`
+2. Paste a product image URL
+3. Enter product name and select category
+4. Click **Add to catalog**
+
+The backend downloads the image, runs YOLO detection, crops, embeds with Gemini, and upserts to Pinecone. `pinecone_id` is `md5(image_url)[:16]` — re-adding the same URL is idempotent.
+
+### Option B — bulk via CSV
+
+Prepare a CSV with these columns:
+
+```csv
+image_url,product_name,category
+https://example.com/chair.jpg,Oak Accent Chair,chair
+https://example.com/sofa.jpg,Grey Linen Sofa,couch
+```
+
+Run the ingestion script:
 
 ```bash
-# Basic ingestion
-.venv/bin/python3 ingest.py --csv data/products.csv
+# Basic
+python ingest.py --csv data/products.csv
 
 # With options
-.venv/bin/python3 ingest.py \
+python ingest.py \
   --csv data/products.csv \
-  --batch-size 10 \
-  --max-workers 6 \
+  --max-workers 4 \
+  --confidence 0.15 \
   --log-level INFO \
-  --api-url http://localhost:8000
+  --failures-csv failed_ingestions.csv
 ```
 
-### Parameters
+**Parameters:**
 
-- `--csv`: Path to CSV file (required)
-- `--batch-size`: Batch size for progress tracking (default: 10)
-- `--max-workers`: Concurrent async workers (default: 6)
-- `--log-level`: DEBUG, INFO, WARNING, ERROR (default: INFO)
-- `--api-url`: Backend URL (default: http://localhost:8000)
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--csv` | required | Path to input CSV |
+| `--max-workers` | `4` | Concurrent threads |
+| `--confidence` | `0.15` | YOLO detection confidence threshold |
+| `--failures-csv` | `failed_ingestions.csv` | Output file for failed rows |
+| `--dry-run` | off | Parse & validate only, skip embed/upsert |
+| `--log-level` | `INFO` | DEBUG / INFO / WARNING / ERROR |
 
-### Monitor Progress
-
-```bash
-# Watch ingestion log
-tail -f ingestion.log
-
-# Check failures
-cat failed_ingestions.csv
-```
+Failed rows are written to `--failures-csv` so you can inspect and re-run them without reprocessing the full dataset.
 
 ---
 
-## 📊 3-Tier Category System
+## API Endpoints
 
-### SMALL (10 categories) - 6% ROA, Blur ≥30, 4 crops
-```
-cup, plate, cooking-pot, coffee-maker, cooking-appliance, 
-food-processor, candle, vase, flower, statue-and-antique
-```
+### `POST /api/v1/detect-and-segment`
+Detect all objects in a room image.
+- **Body**: `multipart/form-data` with `image` (file)
+- **Returns**: list of detected objects with bounding boxes
 
-### MEDIUM (23 categories) - 8% ROA, Blur ≥25, 4 crops
-```
-chair, office-chair, side-table, console, center-table, 
-service-table, tv-table, storage-box, shelve, pillow,
-lighting, lampshade, wall-lighting, outdoor-lighting,
-chandelier, pendant-lighting, floor-stand, decorative-hanger,
-wall-clock, art-canvas, laundry-basket, serving-utensil-and-tray,
-flower-pot-and-plant
-```
+### `POST /api/v1/search`
+Search for similar products using a query image.
+- **Body**: `multipart/form-data`
+  - `image` — image file (required)
+  - `assigned_category` — category hint (optional)
+  - `top_k` — number of results, default `50`
+  - `bbox_x1/y1/x2/y2` — pre-computed bbox to skip detection (optional)
+- **Returns**: ranked list of matching products with `product_name`, `category`, `image_url`, `score`
 
-### LARGE (13 categories) - 12% ROA, Blur ≥20, 9 crops
-```
-3-seater-sofa, 2-seater-sofa, l-shape-sofa, sofa, chaise-lounge,
-bed, bedspread, mattresses, comforter, dressing-table,
-office-table, dining-table, carpet
-```
+### `POST /api/v1/catalog/add`
+Add a single product to the catalog via its image URL.
+- **Body**: JSON
+  ```json
+  {
+    "image_url": "https://example.com/product.jpg",
+    "product_name": "Oak Accent Chair",
+    "category": "chair"
+  }
+  ```
+- **Returns**: `{ "pinecone_id": "...", "success": true, "message": "..." }`
 
----
-
-## 🎯 Validation Rules
-
-### Image Quality (All Categories)
-- **File size**: ≤ 15MB
-- **Format**: JPEG, PNG, WebP
-- **Dimensions**: ≥ 500×500 pixels (both width and height)
-- **Auto-resize**: Images > 4096px resized automatically
-- **Contrast**: Standard deviation ≥ 1.0
-
-### Category-Specific (Ingestion Only)
-- **Blur Detection**: 30 (small), 25 (medium), 20 (large) - Laplacian variance
-- **ROA (Ratio of Area)**: 6% (small), 8% (medium), 12% (large)
-- **Category Match**: Detected category must match assigned category
-
-### Retrieval (User Search)
-- **More lenient**: No ROA check, universal blur threshold (25)
-- **Flexible**: Accepts any detected category
+### `GET /api/v1/health`
+Returns service health status.
 
 ---
 
-## 🔧 Configuration
-
-### Test Mode
-
-For testing validation without embedding generation:
-
-```bash
-# In .env
-TEST_MODE=true   # Skip embedding & Pinecone (fast testing)
-TEST_MODE=false  # Full production mode (default)
-```
-
-### Detection Settings
-
-```bash
-DETECTION_MODE=runpod              # Use RunPod API (recommended)
-RUNPOD_API_URL=your_endpoint_url
-RUNPOD_API_KEY=your_api_key
-RUNPOD_CONFIDENCE_THRESHOLD=0.10   # Detection confidence (default: 0.10)
-```
-
-### Embedding Settings
-
-```bash
-ENABLE_MULTISCALE_EMBEDDING=true
-EMBEDDING_SCALES=224,384,512
-INSTANCE_MODEL_NAME=google/vit-base-patch16-224-in21k
-SEMANTIC_MODEL_NAME=openai/clip-vit-base-patch32
-```
-
-### Search Settings
-
-```bash
-SEARCH_CANDIDATE_MULTIPLIER=15
-MAX_CANDIDATE_K=5000
-ENABLE_MULTISTAGE_RERANK=true
-```
-
----
-
-## 📡 API Endpoints
-
-### Detection
-
-**POST** `/api/v1/detect-and-segment`
-- Upload image → Returns all detected objects with masks
-- Used by frontend to show detection overlay
-
-### Search
-
-**POST** `/api/v1/search`
-- Upload image (+ optional bbox/mask) → Returns similar products
-- Supports both full detection and bbox-based search
-
-Parameters:
-- `image`: Image file (required)
-- `assigned_category`: Category hint (optional)
-- `top_k`: Number of results (default: 50)
-- `bbox_x1, bbox_y1, bbox_x2, bbox_y2`: User-selected bbox (optional)
-- `mask_polygon`: JSON polygon points (optional)
-
-### Catalog
-
-**POST** `/api/v1/catalog/upsert`
-- Upload product image → Processes and indexes to Pinecone
-- Used by ingestion script
-
----
-
-## 🏗️ Project Structure
+## Project Structure
 
 ```
-image-search-back/
+image-recommendation/
 ├── app/
-│   ├── api/v1/endpoints/     # FastAPI endpoints
-│   ├── core/                 # Config, constants, errors
-│   │   └── constants.py      # 3-tier categories & thresholds
-│   ├── models/               # Data models & schemas
-│   ├── services/             # Business logic
-│   │   ├── detection_rfdetr.py      # RF-DETR detection
-│   │   ├── segmentation_polygon.py  # Polygon segmentation
-│   │   ├── preprocessing.py         # Cropping & masking
-│   │   ├── embedding_multiscale.py  # Multi-scale embeddings
-│   │   ├── search_service.py        # Search orchestration
-│   │   └── rerank.py               # Visual reranking
-│   ├── repositories/         # Pinecone integration
-│   └── main.py              # FastAPI app entry point
-├── frontend/                # Next.js React frontend
-│   ├── app/                # Pages
-│   ├── components/         # React components
-│   └── lib/               # API client & utilities
-├── data/                  # CSV files for ingestion
-├── ingest.py             # Batch ingestion script
-├── requirements.txt      # Python dependencies
-├── ENV_TEMPLATE.txt      # Environment template
-└── README.md            # This file
+│   ├── api/v1/endpoints/
+│   │   ├── catalog.py        # POST /catalog/add
+│   │   ├── detection.py      # POST /detect-and-segment
+│   │   ├── health.py
+│   │   └── search.py         # POST /search
+│   ├── core/
+│   │   ├── config.py         # Settings (loaded from .env)
+│   │   ├── constants.py      # Image quality thresholds
+│   │   └── errors.py
+│   ├── dependencies/
+│   │   └── container.py      # Dependency injection
+│   ├── models/
+│   │   ├── domain.py         # Detection, Segment dataclasses
+│   │   └── schemas.py        # Pydantic request/response models
+│   ├── repositories/
+│   │   └── pinecone_repo.py  # Upsert & query
+│   ├── services/
+│   │   ├── detection_yolo.py     # YOLO11n detection
+│   │   ├── embedding_gemini.py   # Gemini embedding
+│   │   ├── image_io.py           # Image loading & validation
+│   │   ├── preprocessing.py      # Tight bbox crop
+│   │   ├── search_service.py     # Search orchestration
+│   │   └── segmentation.py       # BBoxSegmentationService
+│   └── main.py
+├── frontend/
+│   ├── app/
+│   │   ├── add/page.tsx      # Add product page
+│   │   ├── results/page.tsx  # Search results page
+│   │   └── page.tsx          # Home / search page
+│   ├── components/
+│   │   ├── AddProduct.tsx
+│   │   ├── Navigation.tsx
+│   │   ├── SearchInterface.tsx
+│   │   └── SearchResults.tsx
+│   └── lib/
+│       └── api.ts            # Typed API client
+├── data/
+│   └── demo.csv              # 5-row sample for testing
+├── ingest.py                 # Bulk CSV ingestion script
+├── requirements.txt
+├── .env.example
+└── README.md
 ```
 
 ---
 
-## 🔬 Pipeline Flow
+## Pipeline Details
 
-### Ingestion (Catalog Building)
+### Search flow
 ```
-1. CSV → Download images
-2. Quality validation (blur ≥30/25/20, ROA ≥6/8/12%)
-3. RF-DETR detection → Category match required
-4. Polygon segmentation
-5. Crop generation (4 or 9 based on tier)
-6. White background masking (tight crops)
-7. Multi-scale embedding (1024-dim vector)
-8. Pinecone upsert (category namespaces)
-```
-
-### Search (User Query)
-```
-1. Upload room photo
-2. RF-DETR detects all objects
-3. User clicks object → Pass bbox+mask
-4. Skip re-detection (fast path!)
-5. Crop & mask selected object
-6. Generate embedding
-7. Pinecone similarity search
-8. Visual cross-encoder reranking
-9. Return top 50 results
+1. User uploads room photo
+2. YOLO11n detects all objects (CPU, ~200ms)
+3. User clicks on a detected object
+4. Tight bbox crop — no masking, no padding
+5. Gemini embed_crops() → 3072-dim vector (L2-normalized)
+6. Pinecone query in the matching category namespace
+7. Top-K results returned with product_name, category, image_url, score
 ```
 
-
-
-
-
-
-## 🔑 Key Configuration Files
-
-- **ENV_TEMPLATE.txt**: All environment variables with explanations
-- **app/core/constants.py**: Categories and thresholds
-- **ingest.py**: Batch ingestion script
-- **requirements.txt**: Python dependencies
+### Ingestion flow
+```
+1. CSV row → download image from image_url
+2. Validate: ≥300px each side, contrast std ≥ 1.0
+3. YOLO11n detect (category-hint filtered)
+4. Pick largest matching bbox; fall back to full image if none detected
+5. Tight crop → Gemini embed → L2-normalize
+6. Pinecone upsert: namespace = category, id = md5(image_url)[:16]
+7. Failures logged to CSV for review
+```
 
 ---
 
-## 📚 Additional Documentation
+## Image Quality Requirements
 
-- Check `ENV_TEMPLATE.txt` for detailed configuration options
-- Review `app/core/constants.py` for threshold tuning
-- See `failed_ingestions.csv` after ingestion for quality insights
-
----
-
-
+| Check | Threshold |
+|-------|-----------|
+| Minimum dimension | 300px (width and height) |
+| Maximum dimension | 4096px (auto-resized) |
+| Maximum file size | 10 MB |
+| Contrast (std dev) | ≥ 1.0 (rejects blank/uniform images) |

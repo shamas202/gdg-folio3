@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { SearchHit } from "@/lib/api";
-import { Package, Star, Tag, ExternalLink } from "lucide-react";
+import { Package, Star, Tag } from "lucide-react";
 import Link from "next/link";
 
 interface SearchResultsProps {
@@ -23,21 +23,12 @@ export function SearchResults({ hits, message }: SearchResultsProps) {
             {message}
           </p>
         )}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
-          <Link
-            href="/"
-            className="text-primary-600 hover:text-primary-700 underline font-medium"
-          >
-            Try a different search
-          </Link>
-          <span className="text-neutral-400">or</span>
-          <Link
-            href="/catalog"
-            className="text-primary-600 hover:text-primary-700 underline font-medium"
-          >
-            Add products to catalog
-          </Link>
-        </div>
+        <Link
+          href="/"
+          className="text-primary-600 hover:text-primary-700 underline font-medium"
+        >
+          Try a different search
+        </Link>
       </div>
     );
   }
@@ -53,7 +44,6 @@ export function SearchResults({ hits, message }: SearchResultsProps) {
         </p>
       </div>
 
-      {/* navbar=64px + page pt-8=32px + heading block≈96px = 192px above this div */}
       <div
         className="overflow-y-scroll border border-neutral-100 rounded-lg p-2"
         style={{ height: "calc(100vh - 210px)" }}
@@ -73,10 +63,9 @@ function ProductCard({ hit, rank }: { hit: SearchHit; rank: number }) {
   const [imageLoading, setImageLoading] = useState(true);
 
   const imageUrl = hit.image_url || null;
-  const productName = hit.name_english || hit.name_arabic || hit.pinecone_id;
-  const hasPrice = hit.price_amount !== null && hit.price_amount !== undefined;
+  const productName = hit.product_name || hit.name_english || hit.name_arabic || hit.pinecone_id;
 
-  const CardContent = (
+  return (
     <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden hover:shadow-lg transition-shadow">
       <div className="aspect-square bg-neutral-100 flex items-center justify-center relative overflow-hidden">
         {imageUrl && !imageError ? (
@@ -108,76 +97,22 @@ function ProductCard({ hit, rank }: { hit: SearchHit; rank: number }) {
             <span>Best Match</span>
           </div>
         )}
+        {/* Match score badge */}
+        <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-1 rounded-md text-xs font-medium">
+          {Math.round(hit.score * 100)}%
+        </div>
       </div>
       <div className="p-4">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <h3 className="font-semibold text-neutral-900 mb-1 line-clamp-2" title={productName}>
-              {productName}
-            </h3>
-            {hit.category && (
-              <div className="flex items-center space-x-1 text-sm text-neutral-600 mb-2">
-                <Tag className="w-3 h-3" />
-                <span className="capitalize">{hit.category.replace(/-/g, ' ')}</span>
-              </div>
-            )}
+        <h3 className="font-semibold text-neutral-900 mb-1 line-clamp-2" title={productName}>
+          {productName}
+        </h3>
+        {hit.category && (
+          <div className="flex items-center space-x-1 text-sm text-neutral-500">
+            <Tag className="w-3 h-3" />
+            <span className="capitalize">{hit.category.replace(/-/g, " ")}</span>
           </div>
-        </div>
-
-        {/* Price */}
-        {hasPrice && (
-          <div className="mb-3">
-            <span className="text-lg font-bold text-primary-600">
-              {hit.price_amount} {hit.price_unit || 'SAR'}
-            </span>
-          </div>
-        )}
-
-        {/* Store and Countries */}
-        {(hit.store || (hit.countries && hit.countries.length > 0)) && (
-          <div className="mt-3 pt-3 border-t border-neutral-100">
-            <div className="text-xs text-neutral-500 space-y-1">
-              {hit.store && (
-                <div className="flex justify-between">
-                  <span>Store:</span>
-                  <span className="text-neutral-700 font-medium">{hit.store}</span>
-                </div>
-              )}
-              {hit.countries && hit.countries.length > 0 && (
-                <div className="flex justify-between">
-                  <span>Available in:</span>
-                  <span className="text-neutral-700 font-medium">{hit.countries.join(', ')}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Product URL Link */}
-        {hit.product_url && (
-          <a
-            href={hit.product_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 flex items-center justify-center space-x-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
-          >
-            <span>View Product</span>
-            <ExternalLink className="w-4 h-4" />
-          </a>
         )}
       </div>
     </div>
   );
-
-  // If there's a product URL, make the whole card clickable
-  if (hit.product_url) {
-    return (
-      <a href={hit.product_url} target="_blank" rel="noopener noreferrer" className="block">
-        {CardContent}
-      </a>
-    );
-  }
-
-  return CardContent;
 }
-

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, Package, Home } from "lucide-react";
+import { PlusCircle, Search, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Navigation() {
@@ -10,7 +10,7 @@ export function Navigation() {
 
   const navItems = [
     { href: "/", label: "Search", icon: Search },
-    { href: "/catalog", label: "Catalog", icon: Package },
+    { href: "/add", label: "Add Product", icon: PlusCircle },
   ];
 
   return (

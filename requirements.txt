@@ -12,25 +12,15 @@ pinecone==8.0.0
 pillow>=10.4.0
 numpy>=1.24.0,<2.0.0
 opencv-python>=4.10.0.84
-# ML/AI (required for embeddings) - GPU-enabled for CUDA 12.8
-# The --extra-index-url ensures pip installs GPU builds from PyTorch's CUDA repository
---extra-index-url https://download.pytorch.org/whl/cu128
-torch>=2.2.0
-torchvision>=0.17.0
-transformers>=4.40.0,<4.48.0  # Compatible with torch 2.2.x
-safetensors>=0.4.0  # Safer model loading format
-# Batch ingestion
+# Detection (YOLO11n — CPU, downloads model weights on first run)
+ultralytics>=8.3.0
+# Embeddings
+google-genai>=1.0.0
+# Ingestion utilities
 pandas>=2.0.0
 openpyxl>=3.1.0
 httpx>=0.27.0
 tqdm>=4.66.0
-google-genai>=1.0.0
-
-
- 
-
-
-
 
 
 

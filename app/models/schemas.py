@@ -15,6 +15,7 @@ class SearchHit(BaseModel):
     score: float
     image_url: str | None = None
     product_url: str | None = None
+    product_name: str | None = None   # Simplified demo metadata
     name_english: str | None = None
     name_arabic: str | None = None
     category: str | None = None
@@ -36,6 +37,12 @@ class CatalogUpsertResponse(BaseModel):
     pinecone_id: str
     upserted: bool
     message: str | None = None
+
+
+class CatalogAddResponse(BaseModel):
+    pinecone_id: str
+    success: bool
+    message: str
 
 
 class DetectedObject(BaseModel):
