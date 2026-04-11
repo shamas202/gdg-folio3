@@ -39,19 +39,12 @@ export function SearchInterface() {
 
   const processImageFile = async (file: File) => {
     // Import preprocessing utilities
-    const { preprocessImage, getImageDimensions, validateImageFile, validateImageDimensions } = await import("@/lib/imageUtils");
+    const { preprocessImage, getImageDimensions, validateImageFile } = await import("@/lib/imageUtils");
 
     // Validate file type and size
     const validationError = validateImageFile(file);
     if (validationError) {
       setError(validationError);
-      return;
-    }
-
-    // Validate dimensions (minimum 400x400px)
-    const dimensionError = await validateImageDimensions(file);
-    if (dimensionError) {
-      setError(dimensionError);
       return;
     }
 
@@ -241,7 +234,7 @@ export function SearchInterface() {
                   Click to upload or drag and drop
                 </p>
                 <p className="text-sm text-neutral-500">
-                  PNG, JPG, WEBP up to 15MB (minimum 400×400px recommended)
+                  PNG, JPG, WEBP up to 15MB
                 </p>
               </div>
             </div>

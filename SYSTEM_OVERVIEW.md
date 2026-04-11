@@ -206,7 +206,7 @@ Response:
 
 User drags and drops or clicks to upload an image.
 
-- Frontend validates: file type (image/*), minimum 400×400px
+- Frontend validates: file type (image/*)
 - Images larger than 1920px are client-side resized before upload
 - The image is sent to the detection endpoint automatically on upload
 
@@ -285,7 +285,7 @@ Backend (slow path — no bbox provided):
 
 - Same size, format, and contrast checks apply
 - No ROA (ratio-of-area) check — user room photos vary in framing
-- Frontend also validates minimum 400×400px before sending to backend
+
 
 ---
 
@@ -496,7 +496,7 @@ PINECONE_INDEX_OVERRIDE=
 ```
 1. User opens localhost:3000
 2. Drag-and-drop or click to upload room photo
-3. Client-side validation (type, minimum 400×400px)
+3. Client-side validation (type)
 4. If image > 1920px: client-side resize before upload
 5. POST to /api/v1/detect-and-segment
 6. Bounding boxes rendered as clickable overlays on the image
