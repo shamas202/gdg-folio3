@@ -69,7 +69,6 @@ SUPPORTED_CATEGORIES = set(CATEGORY_TO_YOLO.keys())
 
 DEFAULT_MAX_WORKERS = 4
 DEFAULT_CONFIDENCE = 0.15
-MIN_CROP_DIMENSION = 50  # Reject degenerate crops smaller than this (px)
 
 
 # ---------------------------------------------------------------------------
@@ -146,13 +145,7 @@ def tight_crop(img: Image.Image, bbox: tuple[int, int, int, int]) -> Image.Image
     y1 = max(0, min(y1, h - 1))
     x2 = max(x1 + 1, min(x2, w))
     y2 = max(y1 + 1, min(y2, h))
-    crop = img.crop((x1, y1, x2, y2))
-    cw, ch = crop.size
-    if cw < MIN_CROP_DIMENSION or ch < MIN_CROP_DIMENSION:
-        raise ValueError(
-            f"Crop too small ({cw}×{ch}px) — degenerate bbox {bbox}"
-        )
-    return crop
+    return img.crop((x1, y1, x2, y2))
 
 
 # ---------------------------------------------------------------------------
