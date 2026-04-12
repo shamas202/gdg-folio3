@@ -35,10 +35,10 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
 # Fill PINECONE_* , GOOGLE_API_KEY , etc.
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API docs: **http://localhost:8001/docs**
+API docs: **http://localhost:8000/docs**
 
 ### 2. Frontend
 
@@ -46,7 +46,7 @@ API docs: **http://localhost:8001/docs**
 cd frontend
 npm install
 cp .env.example .env.local
-# Default API URL matches backend on 8001; change NEXT_PUBLIC_API_URL if needed
+# Default API URL matches backend on 8000; change NEXT_PUBLIC_API_URL if needed
 npm run dev
 ```
 
@@ -87,4 +87,4 @@ Copy `.env.example` → `.env`. Minimum:
 | `POST` | `/api/v1/search` | Similar products (image + optional bbox / category) |
 | `POST` | `/api/v1/catalog/add` | Add one product by image URL |
 
-Details and schemas: **http://localhost:8001/docs**
+Details and schemas: **http://localhost:8000/docs**
