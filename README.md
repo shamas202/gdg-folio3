@@ -155,15 +155,6 @@ Run the ingestion script:
 # Basic
 python ingest.py --csv data/products.csv
 
-# With options
-python ingest.py \
-  --csv data/products.csv \
-  --max-workers 4 \
-  --confidence 0.15 \
-  --log-level INFO \
-  --failures-csv failed_ingestions.csv
-```
-
 **Parameters:**
 
 | Flag | Default | Description |

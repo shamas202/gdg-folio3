@@ -1,12 +1,8 @@
-# Byte-compiled / optimized / DLL files
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -14,8 +10,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Root-only: avoid ignoring frontend/lib/ (Next.js app source)
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -26,16 +23,10 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
-# PyInstaller
 *.manifest
 *.spec
-
-# Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
-
-# Unit test / coverage reports
 htmlcov/
 .tox/
 .nox/
@@ -48,93 +39,61 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
-
-# Translations
 *.mo
 *.pot
-
-# Django stuff:
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-
-# Flask stuff:
 instance/
 .webassets-cache
-
-# Scrapy stuff:
 .scrapy
-
-# Sphinx documentation
 docs/_build/
-
-# PyBuilder
 target/
-
-# Jupyter Notebook
 .ipynb_checkpoints
-
-# IPython
 profile_default/
 ipython_config.py
-
-# pyenv
 .python-version
-
-# pipenv
 Pipfile.lock
-
-# PEP 582
 __pypackages__/
-
-# Celery stuff
 celerybeat-schedule
 celerybeat.pid
-
-# SageMath parsed files
 *.sage.py
-
-# Environments
-.env
-.venv
-env/
+.venv/
 venv/
+env/
 ENV/
 env.bak/
 venv.bak/
-
-# Spyder project settings
 .spyderproject
 .spyproject
-
-# Rope project settings
 .ropeproject
-
-# mkdocs documentation
 /site
-
-# mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Pyre type checker
 .pyre/
+.ruff_cache/
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
+# uv (package manager / cache)
+.uv/
 
-# OS files
-Thumbs.db
-.DS_Store
+# --- Node / frontend (monorepo) ---
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel
+frontend/.turbo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+.eslintcache
 
-# Model files (large ML models)
+# --- ML / large binaries ---
 *.pt
 *.pth
 *.onnx
@@ -143,46 +102,42 @@ Thumbs.db
 *.ckpt
 *.safetensors
 
-# Large data files
+# Archives (often large datasets)
 *.zip
 *.tar.gz
 *.rar
 
-# User uploaded images
+# --- This project: runtime images & debug output ---
 images/catalog/*
 !images/catalog/.gitkeep
 images/search/*
 !images/search/.gitkeep
-
-# Debug crop folders (generated during ingestion/search)
 debug_crop_image/
 debug_crops_search/
 
-# Ingestion outputs
+# Ingestion / batch outputs
 failed_ingestions.csv
 ingestion.log
-
-# Logs
-*.log
 logs/
 
-# Temporary files
+# --- Temp & backups ---
 *.tmp
 *.temp
 *.bak
 *.backup
 
-# Environment configuration (keep template, ignore actual)
+# --- Secrets & local env ---
 .env
 .env.local
 .env.*.local
-
-# Keep environment template
-!ENV_TEMPLATE.txt
-
-# Frontend (Next.js)
-frontend/.next/
-frontend/node_modules/
-frontend/out/
 frontend/.env.local
 frontend/.env.*.local
+
+# --- IDEs & OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

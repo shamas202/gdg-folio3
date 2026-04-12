@@ -20,7 +20,7 @@ export function Navigation() {
           <Link href="/" className="flex items-center space-x-2">
             <Home className="w-6 h-6 text-primary-600" />
             <span className="text-xl font-semibold text-neutral-900">
-              Interior Visual Search
+              Product Visual Search
             </span>
           </Link>
           <div className="flex items-center space-x-1">
