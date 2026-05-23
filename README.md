@@ -86,5 +86,5 @@ Copy `.env.example` → `.env`. Minimum:
 | `POST` | `/api/v1/detect-and-segment` | Detect objects in an uploaded image |
 | `POST` | `/api/v1/search` | Similar products (image + optional bbox / category) |
 | `POST` | `/api/v1/catalog/add` | Add one product by image URL |
-
+.
 Details and schemas: **http://localhost:8000/docs**
