@@ -12,11 +12,11 @@ Upload an input image, pick an object, and get **visually similar products** fro
 | API | FastAPI |
 | UI | Next.js + Tailwind |
 
-**Categories** (YOLO/COCO–mapped): chair, couch/sofa, bed, dining-table, tv, clock, vase, laptop, tennis-racket.
+**Categories**: (YOLO/COCO–mapped): chair, couch/sofa, bed, dining-table, tv, clock, vase, laptop, tennis-racket.
 
 ---
 
-## Prerequisites
+## Prerequisites:
 
 - Python 3.11+
 - Node.js 18+
